@@ -21,7 +21,7 @@ for i in range(len(reader.pages)):
         continue
     num = str(i + 1)  # cover counts as page 1 (Word convention)
     c.setFont("Helvetica", 10.5)
-    c.setFillColorRGB(0.25, 0.25, 0.25)
+    c.setFillColorRGB(0.1, 0.1, 0.1)
     c.drawCentredString(W / 2.0, 24, num)
     c.showPage()
 c.save()
