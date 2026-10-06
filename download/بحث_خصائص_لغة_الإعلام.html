@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>خصائص لغة الإعلام</title>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<style>
+@page {
+    size: 794px 1123px;
+    margin: 0;
+}
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 794px;
+    background: #ffffff;
+    color: #111111;
+    font-family: 'Amiri', 'Traditional Arabic', serif;
+    line-break: strict;
+    word-break: normal;
+    overflow-wrap: break-word;
+}
+
+/* ===================== COVER ===================== */
+.cover {
+    width: 794px;
+    height: 1123px;
+    position: relative;
+    overflow: hidden;
+    break-after: page;
+    background: #ffffff;
+    box-sizing: border-box;
+}
+.cover-frame {
+    position: absolute;
+    top: 28px; bottom: 28px; right: 28px; left: 28px;
+    border: 1.5px solid #111111;
+}
+.inst-box {
+    position: absolute;
+    top: 28px; right: 54px;
+    border: 1.6px dashed #1f4e9c;
+    background: #ffffff;
+    padding: 13px 22px 15px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 20px;
+    line-height: 1.6;
+    color: #1f4e9c;
+}
+.logo-block {
+    position: absolute;
+    top: 56px; left: 56px;
+    width: 170px;
+    text-align: center;
+}
+.logo-block img { width: 158px; height: 158px; display: block; margin: 0 auto; }
+.cover-fields {
+    position: absolute;
+    top: 474px; right: 60px; left: 60px;
+    text-align: center;
+}
+.cf-label { color: #1f4e9c; font-weight: 700; font-size: 26px; margin-bottom: 7px; line-height: 1.45; }
+.cf-value { color: #101010; font-weight: 700; font-size: 24.5px; margin-bottom: 30px; line-height: 1.45; }
+.cf-value.title { font-size: 26.5px; }
+.academic-year {
+    position: absolute;
+    bottom: 100px; right: 60px; left: 60px;
+    text-align: center;
+}
+.academic-year .cf-label { font-size: 23px; margin-bottom: 6px; }
+.academic-year .cf-value { font-size: 22.5px; margin-bottom: 0; }
+.cover-wordmark {
+    position: absolute;
+    bottom: 38px; right: 0; left: 0;
+    text-align: center;
+}
+.cover-wordmark img { height: 44px; }
+
+/* ===================== CONTENT PAGES ===================== */
+.page {
+    position: relative;
+    box-sizing: border-box;
+    padding: 152px 88px 46px;
+    break-after: page;
+}
+.page.last { break-after: auto; }
+.corner-logo {
+    position: absolute;
+    top: 16px; left: 30px;
+    height: 82px;
+}
+
+/* ===================== TOC ===================== */
+.toc-title {
+    text-align: center;
+    font-weight: 700;
+    font-size: 26px;
+    color: #1f4e9c;
+    text-decoration: underline;
+    margin: 2px 0 34px;
+}
+.toc-row { display: flex; align-items: baseline; margin-bottom: 31px; break-inside: avoid; }
+.toc-text { font-size: 19.5px; font-weight: 700; color: #111; max-width: 72%; }
+.toc-row.sub .toc-text { font-weight: 400; font-size: 18.5px; color: #111; padding-right: 26px; }
+.toc-dots { flex: 1; border-bottom: 2px dotted #444444; margin: 0 10px; transform: translateY(-4px); }
+.toc-page { font-weight: 700; font-size: 18px; color: #1f4e9c; min-width: 30px; text-align: left; }
+
+/* ===================== SECTIONS ===================== */
+h2.section-title {
+    text-align: center;
+    font-weight: 700;
+    font-size: 23px;
+    color: #1f4e9c;
+    text-decoration: underline;
+    line-height: 1.5;
+    margin: 2px 0 14px;
+    break-after: avoid;
+    break-inside: avoid;
+}
+h3.sub-title {
+    font-weight: 700;
+    font-size: 19.5px;
+    color: #1f4e9c;
+    margin: 12px 0 5px;
+    break-after: avoid;
+}
+p { margin: 0 0 8px; text-align: justify; font-size: 19px; line-height: 1.75; }
+.ref-list { margin-top: 6px; }
+.ref-list p {
+    text-align: right; font-size: 16.5px; line-height: 1.75;
+    margin: 0 0 9px; padding-right: 32px; text-indent: -32px;
+}
+</style>
+</head>
+<body>
+
+<!-- ============ PAGE 1 : COVER ============ -->
+<div class="cover">
+    <div class="cover-frame"></div>
+
+    <div class="inst-box">معهد الجيزة العالي<br>للإعلام و علوم الاتصال</div>
+
+    <div class="logo-block">
+        <img src="egi_logo_main.png" alt="شعار المعهد">
+    </div>
+
+    <div class="cover-fields">
+        <div class="cf-label">موضوع البحث :</div>
+        <div class="cf-value title">خصائص لغة الإعلام</div>
+
+        <div class="cf-label">الفرقة :</div>
+        <div class="cf-value">الاولي</div>
+
+        <div class="cf-label">مقدم من الطالب :</div>
+        <div class="cf-value">محمد حمدي بيومي السيد</div>
+
+        <div class="cf-label">تحت إشراف :</div>
+        <div class="cf-value">د / سيد عثمان</div>
+    </div>
+
+    <div class="academic-year">
+        <div class="cf-label">العام الدراسي :</div>
+        <div class="cf-value">2026 / 2027</div>
+    </div>
+
+    <div class="cover-wordmark">
+        <img src="egi_logo_word.png" alt="معهد الجيزة العالي">
+    </div>
+</div>
+
+<!-- ============ PAGE 2 : TOC ============ -->
+<section class="page">
+    <img class="corner-logo" src="egi_logo_main.png" alt="">
+
+    <div class="toc-title">الفهرس</div>
+
+    <div class="toc-row"><div class="toc-text">المقدمة</div><div class="toc-dots"></div><div class="toc-page">3</div></div>
+
+    <div class="toc-row"><div class="toc-text">المبحث الأول: مفهوم لغة الإعلام وعلاقتها باللغة العامة</div><div class="toc-dots"></div><div class="toc-page">4</div></div>
+
+    <div class="toc-row"><div class="toc-text">المبحث الثاني: أبرز خصائص لغة الإعلام</div><div class="toc-dots"></div><div class="toc-page">5</div></div>
+
+    <div class="toc-row"><div class="toc-text">المبحث الثالث: اختلاف لغة الوسائل الإعلامية ومتطلبات التطوير</div><div class="toc-dots"></div><div class="toc-page">6</div></div>
+
+    <div class="toc-row"><div class="toc-text">الخاتمة والنتائج والتوصيات</div><div class="toc-dots"></div><div class="toc-page">7</div></div>
+
+    <div class="toc-row"><div class="toc-text">قائمة المراجع</div><div class="toc-dots"></div><div class="toc-page">7</div></div>
+</section>
+
+<!-- ============ PAGE 3 : المقدمة ============ -->
+<section class="page">
+    <img class="corner-logo" src="egi_logo_main.png" alt="">
+
+    <h2 class="section-title">المقدمة</h2>
+
+    <p>تعد لغة الإعلام من المواضيع المهمة التي تشغل الباحثين في مجال الإعلام والاتصال، فاللغة هي الأداة التي يصل من خلالها المضمون الإعلامي إلى الناس، سواء كانت مكتوبة في الصحف أو منطوقة في الراديو والتلفزيون، وتنوع الجمهور واختلاف مستوياته هو ما أعطى هذه اللغة شكلها الخاص.</p>
+
+    <p>لذلك نتناول في هذا البحث مفهوم لغة الإعلام وأبرز خصائصها، والعوامل المؤثرة فيها، ومتطلبات تطويرها في ظل الوسائل الجديدة.</p>
+
+    <h3 class="sub-title">مشكلة البحث:</h3>
+    <p>ويمكن صياغة مشكلة البحث في تساؤل رئيس هو: ما المقصود بلغة الإعلام؟ وما أبرز خصائصها؟ وما متطلبات تطويرها في الوقت الحالي؟</p>
+
+    <h3 class="sub-title">أهمية البحث:</h3>
+    <p>وتظهر اهمية البحث في أن لغة الإعلام تصل كل يوم إلى ملايين الناس من مختلف المستويات، وأن فهم خصائصها يساعد على فهم طريقة تأثير الإعلام في الجمهور، كما تفيد دراسته الطلبة والمشتغلين في هذا المجال.</p>
+
+    <h3 class="sub-title">أهداف البحث:</h3>
+    <p>ويهدف البحث إلى التعرف على مفهوم لغة الإعلام، وبيان أبرز خصائصها، وتوضيح الفرق بين لغة الصحافة والراديو والتلفزيون، وإبراز متطلبات تطويرها.</p>
+
+    <h3 class="sub-title">منهج البحث:</h3>
+    <p>واعتمد البحث على المنهج الوصفي التحليلي، حيث يقوم على وصف ظاهرة لغة الإعلام وتحليل خصائصها وجمع المعلومات عنها من المصادر المختلفة، ثم تفسيرها حتى نصل الى نتائج تجيب عن تساؤلات البحث.</p>
+</section>
+
+<!-- ============ PAGE 4 : المبحث الأول ============ -->
+<section class="page">
+    <img class="corner-logo" src="egi_logo_main.png" alt="">
+
+    <h2 class="section-title">المبحث الأول: مفهوم لغة الإعلام وعلاقتها باللغة العامة</h2>
+
+    <h3 class="sub-title">أولاً: تعريف لغة الإعلام:</h3>
+    <p>اختلف الباحثون في تعريف لغة الإعلام بحسب اهتمام كل منهم ومجال دراسته، ويمكن القول إنها الأسلوب الخاص الذي تستخدمه وسائل الإعلام في صياغة الاخبار والبرامج وتقديمها إلى جمهورها، فهي لغة تقع بين الفصحى والعامية، تجمع بين وضوح الأولى وسهولة الثانية حتى يفهمها مختلف أطياف الناس.</p>
+
+    <h3 class="sub-title">ثانياً: لغة الإعلام بين الفصحى والعامية:</h3>
+    <p>وهنا تختلف آراء المتخصصين، ففي حين يرى البعض أن الإعلام ملزم بالفصحى حفاظا على اللغة، يرى آخرون بالاقتراب من العامية حتى تصل الرسالة إلى الجمهور بسهولة، والحل الذي يميل إليه كثير من الباحثين هو المستوى المرن، وهو فصحى مبسطة يفهمها الجميع ولا تنزل إلى مستوى العامية.</p>
+
+    <h3 class="sub-title">ثالثاً: علاقة لغة الإعلام بحياة الناس:</h3>
+    <p>وتتأثر لغة الإعلام بطبيعة الجمهور الذي تخاطبه، فالرسائل الإعلامية توجه إلى فئات مختلفة في العمر والثقافة، لذلك تحرص الوسائل على لغة قريبة من الحياة اليومية، وفي نفس الوقت تحاول أن ترفع مستوى جمهورها تدريجياً بدل أن تنخفض معه.</p>
+</section>
+
+<!-- ============ PAGE 5 : المبحث الثاني ============ -->
+<section class="page">
+    <img class="corner-logo" src="egi_logo_main.png" alt="">
+
+    <h2 class="section-title">المبحث الثاني: أبرز خصائص لغة الإعلام</h2>
+
+    <h3 class="sub-title">أولاً: البساطة والوضوح:</h3>
+    <p>ومن أبرز خصائص لغة الإعلام البساطه والوضوح، فالجمهور واسع ومختلف المستويات، والرسالة يجب أن تفهم من أول سماع أو قراءة، لذلك يبتعد العاملون بالإعلام عن الجمل الطويلة والمصطلحات الصعبة.</p>
+
+    <h3 class="sub-title">ثانياً: الإيجاز والدقة:</h3>
+    <p>أما الإيجاز فهو شرط أساسي، إذ لا مجال للحشو والتطويل، فكل كلمة لها وظيفة، والمعلومات تقدم مباشرة من غير إطالة، خاصة أن المساحة والوقت المتاحين محدودان في الوسائل الإعلامية.</p>
+
+    <h3 class="sub-title">ثالثاً: التشويق وجذب الانتباه:</h3>
+    <p>ولغة الإعلام تشوق المتلقي منذ البداية، فالصحفي يبدأ بخبر أو موقف لافت، ويستخدم الصورة اللغوية والحوار ليجذب الانتباه، لأن جمهور الإعلام حر يغير القناة أو يترك القراءة في أي لحظة.</p>
+
+    <h3 class="sub-title">رابعاً: المرونة وتقبل الجديد:</h3>
+    <p>ولغة الإعلام مرنة سريعة التفاعل مع ما يجري في المجتمع، فهي تمتص الكلمات الجديدة من الحياة اليومية ومن اللغات الأجنبية، وقد دخلت كثير من هذه الكلمات في إستخدام الناس، وهو ما يجعلها في حالة تغير مستمر.</p>
+
+    <h3 class="sub-title">خامساً: القرب من الحياة اليومية:</h3>
+    <p>ولغة الإعلام تعتمد على مواضيع الناس اليومية كالأسعار والتعليم والصحة، وتستخدم أمثلة من الواقع القريب، وهذا القرب هو الذي يجعل المتلقي يشعر أن الخطاب الإعلامي يخاطبه هو بالذات.</p>
+
+    <h3 class="sub-title">سادساً: التأثير في الجمهور:</h3>
+    <p>وأخيراً لغة الإعلام ذات تأثير كبير في اتجاهات الناس وسلوكهم، فطريقة اختيار الكلمات وشكل تقديم الرسالة يمكن أن تغير نظر الجمهور للموضوع، ولهذا يربط الباحثون بين لغة الإعلام وتشكيل الرأي العام.</p>
+</section>
+
+<!-- ============ PAGE 6 : المبحث الثالث ============ -->
+<section class="page">
+    <img class="corner-logo" src="egi_logo_main.png" alt="">
+
+    <h2 class="section-title">المبحث الثالث: اختلاف لغة الوسائل الإعلامية ومتطلبات التطوير</h2>
+
+    <h3 class="sub-title">أولاً: اختلاف اللغة باختلاف الوسيلة:</h3>
+    <p>وتختلف لغة الإعلام من وسيلة إلى أخرى، فلغة الصحافة مكتوبة تسمح بجمل أطول وتفاصيل أكثر، ولغة الراديو تعتمد على السمع فقط فيلزم فيها جمل قصيرة وألفاظ سهلة، ولغة التلفزيون ترتبط بالصورة فتختصر الكلام، أما لغة الإنترنت فقد أصبحت أسرع وأقرب إلى لغة الحوار اليومي، وأصبحت الرسائل أقصر مما كانت من قبل.</p>
+
+    <h3 class="sub-title">ثانياً: متطلبات تطوير لغة الإعلام:</h3>
+    <p>وتحتاج لغة الإعلام إلى مجموعة من المتطلبات، في مقدمتها تدريب العاملين بالإعلام على أساليب الكتابة المبسطة، والاهتمام باللغة في كليات ومعاهد الإعلام، ومتابعة الكلمات الجديدة الداخلة في لغة الوسايل الحديثة، وتشجيع البحوث التي تدرس تأثير هذه اللغة في الجمهور.</p>
+</section>
+
+<!-- ============ PAGE 7 : الخاتمة + المراجع ============ -->
+<section class="page last">
+    <img class="corner-logo" src="egi_logo_main.png" alt="">
+
+    <h2 class="section-title">الخاتمة</h2>
+
+    <p>تناول البحث مفهوم لغة الإعلام وأبرز خصائصها، وما لها من دور في وصول الرسالة الإعلامية إلى الجمهور وفي طريقة العمل الاعلامي، وفيما يلي أهم النتائج التي توصل إليها البحث مع أبرز التوصيات.</p>
+
+    <h3 class="sub-title">أولاً: نتائج البحث:</h3>
+    <p>وقد خلص البحث إلى أن لغة الإعلام أسلوب خاص يقع بين الفصحى والعامية، وأن البساطة والإيجاز والتشويق من أهم خصائصها، وأن اللغة تختلف باختلاف الوسيلة من صحافة وراديو وتلفزيون وإنترنت. كما تبين أن لغة الإعلام لها أثر واضح في اتجاهات الجمهور ورأيه، وأنها في حالة تغير مستمر مع كل جديد.</p>
+
+    <h3 class="sub-title">ثانياً: التوصيات:</h3>
+    <p>ويوصي البحث بتدريب العاملين بالإعلام على أساليب الكتابة المبسطة، والاهتمام بتدريس لغة الإعلام في كليات ومعاهد الإعلام، وتشجيع البحوث عن لغة الوسائل الجديدة، والحفاظ على مستوى رصين من اللغة يفهمه الجمهور ولا ينزل إلى العامية.</p>
+
+    <h2 class="section-title">قائمة المراجع</h2>
+
+    <div class="ref-list">
+        <p>1. عبد المطلب عبد حميد (1978). لغة الإعلام الإذاعي. القاهرة: دار الفكر العربي.</p>
+        <p>2. أحمد بدوي (1986). أساليب الصحافة. جدة: موسوعة جابر بن حيان للطباعة والنشر.</p>
+        <p>3. محمد منير حجاب (1997). أضواء على الصحافة المعاصرة. القاهرة: دار الفكر العربي.</p>
+        <p>4. حسن عماد مكاوي (1999). لغة الإعلام. القاهرة: دار الفكر العربي.</p>
+        <p>5. إبراهيم إمام (2000). الإعلام والاتصال: مفاهيم ومصطلحات. القاهرة: عالم الكتب.</p>
+        <p>6. سعيد سلامة (2008). الإعلام الجديد. عمّان: دار المناهجية للنشر والتوزيع.</p>
+    </div>
+</section>
+
+</body>
+</html>

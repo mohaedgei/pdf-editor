@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 """Stamp page numbers (skip cover) + set document metadata, Word-like natural look."""
 import io
+import sys
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 
-SRC = "/home/z/my-project/download/بحث_الاتجاهات_الحديثة_في_علم_الإعلام.pdf"
+SRC = sys.argv[1] if len(sys.argv) > 1 else "/home/z/my-project/download/بحث_الاتجاهات_الحديثة_في_علم_الإعلام.pdf"
+TITLE = sys.argv[2] if len(sys.argv) > 2 else "الاتجاهات الحديثة في دراسة علم الإعلام"
 DST = SRC  # overwrite in place after building a fresh buffer
 
 reader = PdfReader(SRC)
@@ -37,7 +39,7 @@ for i, page in enumerate(reader.pages):
         writer.add_page(page)
 
 writer.add_metadata({
-    "/Title": "الاتجاهات الحديثة في دراسة علم الإعلام",
+    "/Title": TITLE,
     "/Author": "محمد حمدي بيومي السيد",
     "/Subject": "بحث علمي مقدم إلى معهد الجيزة العالي للإعلام وعلوم الاتصال - الفرقة الأولى",
     "/Creator": "Microsoft Word",

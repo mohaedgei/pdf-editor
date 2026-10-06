@@ -4,7 +4,7 @@
 import sys
 import pypdfium2 as pdfium
 
-PDF = "/home/z/my-project/download/بحث_الاتجاهات_الحديثة_في_علم_الإعلام.pdf"
+PDF = sys.argv[1] if len(sys.argv) > 1 else "/home/z/my-project/download/بحث_الاتجاهات_الحديثة_في_علم_الإعلام.pdf"
 
 markers = [
     "المقدمة",

@@ -2,10 +2,11 @@
 # -*- coding: utf-8 -*-
 """Render PDF pages to PNGs for visual inspection + verify المبحث الأول page."""
 import os
+import sys
 import pypdfium2 as pdfium
 
-PDF = "/home/z/my-project/download/بحث_الاتجاهات_الحديثة_في_علم_الإعلام.pdf"
-OUT = "/home/z/my-project/scripts/preview"
+PDF = sys.argv[1] if len(sys.argv) > 1 else "/home/z/my-project/download/بحث_الاتجاهات_الحديثة_في_علم_الإعلام.pdf"
+OUT = sys.argv[2] if len(sys.argv) > 2 else "/home/z/my-project/scripts/preview"
 os.makedirs(OUT, exist_ok=True)
 
 doc = pdfium.PdfDocument(PDF)

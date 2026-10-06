@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Find body section start pages (searching AFTER the TOC page)."""
+import sys
 import pypdfium2 as pdfium
 
-PDF = "/home/z/my-project/download/بحث_الاتجاهات_الحديثة_في_علم_الإعلام.pdf"
+PDF = sys.argv[1] if len(sys.argv) > 1 else "/home/z/my-project/download/بحث_الاتجاهات_الحديثة_في_علم_الإعلام.pdf"
 
 # search from page 3 onward (skip cover=1 and TOC=2)
 sections = {
