@@ -1,0 +1,928 @@
+     1→'use client'
+     2→
+     3→import { useCallback, useEffect, useRef, useState } from 'react'
+     4→import { toast } from 'sonner'
+     5→import { Button } from '@/components/ui/button'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import {
+     8→  FileUp,
+     9→  FileText,
+    10→  FileDown,
+    11→  Loader2,
+    12→  Plus,
+    13→  MousePointer2,
+    14→  Type as TypeIcon,
+    15→  Undo2,
+    16→  RotateCcw,
+    17→  ZoomIn,
+    18→  Hand,
+    19→} from 'lucide-react'
+    20→import { cn } from '@/lib/utils'
+    21→import { buildLineBlocks, BASELINE_K, type GeoItem } from '@/lib/pdf-layout'
+    22→
+    23→/* ================= الأنواع ================= */
+    24→
+    25→interface TextBlock {
+    26→  id: string
+    27→  page: number
+    28→  x: number
+    29→  top: number
+    30→  w: number
+    31→  size: number
+    32→  baseline: number
+    33→  text: string
+    34→  color: string
+    35→  origin: 'pdf' | 'new'
+    36→  patchBox?: { x: number; y: number; w: number; h: number }
+    37→  dirty: boolean
+    38→  deleted: boolean
+    39→  rtl: boolean
+    40→}
+    41→interface PageData {
+    42→  num: number
+    43→  width: number
+    44→  height: number
+    45→  bg: string
+    46→  blocks: TextBlock[]
+    47→  initial: TextBlock[]
+    48→}
+    49→interface DocData {
+    50→  fileName: string
+    51→  pages: PageData[]
+    52→}
+    53→
+    54→const AR_RE = /[\u0600-\u06FF]/
+    55→const AMIRI_STACK = "'AmiriLocal','Amiri','Traditional Arabic',serif"
+    56→const MAX_SIZE = 30 * 1024 * 1024
+    57→
+    58→/* ================= أدوات ================= */
+    59→
+    60→function cloneBlocks(bs: TextBlock[]): TextBlock[] {
+    61→  return bs.map((b) => ({ ...b, patchBox: b.patchBox ? { ...b.patchBox } : undefined }))
+    62→}
+    63→
+    64→function sampleColor(
+    65→  ctx: CanvasRenderingContext2D,
+    66→  x: number,
+    67→  y: number,
+    68→  w: number,
+    69→  h: number,
+    70→  pw: number,
+    71→  ph: number
+    72→): string {
+    73→  const sx = Math.max(0, Math.floor(x * 2))
+    74→  const sy = Math.max(0, Math.floor(y * 2))
+    75→  const sw = Math.min(Math.ceil(w * 2), Math.floor(pw * 2) - sx)
+    76→  const sh = Math.min(Math.ceil(h * 2), Math.floor(ph * 2) - sy)
+    77→  if (sw <= 2 || sh <= 2) return '#111111'
+    78→  let img: ImageData
+    79→  try {
+    80→    img = ctx.getImageData(sx, sy, sw, sh)
+    81→  } catch {
+    82→    return '#111111'
+    83→  }
+    84→  const counts = new Map<number, number>()
+    85→  const d = img.data
+    86→  for (let i = 0; i < d.length; i += 4) {
+    87→    const r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3]
+    88→    if (a < 50) continue
+    89→    if (r > 205 && g > 205 && b > 205) continue
+    90→    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4)
+    91→    counts.set(key, (counts.get(key) || 0) + 1)
+    92→  }
+    93→  let bc = 0
+    94→  for (const [, c] of counts) bc = Math.max(bc, c)
+    95→  // من بين الألوان المتكررة بشكل معقول نختار الأغمق (لب الضرفة) لا الأكثر تكرارًا (حواف التنعيم)
+    96→  let best = -1
+    97→  let bestLum = Infinity
+    98→  for (const [k, c] of counts) {
+    99→    if (c < Math.max(4, bc * 0.12)) continue
+   100→    const r = ((k >> 8) & 15) * 16 + 8
+   101→    const g = ((k >> 4) & 15) * 16 + 8
+   102→    const b = (k & 15) * 16 + 8
+   103→    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+   104→    if (lum < bestLum) {
+   105→      bestLum = lum
+   106→      best = k
+   107→    }
+   108→  }
+   109→  if (best < 0 || bc < 8) return '#111111'
+   110→  const r = ((best >> 8) & 15) * 16 + 8
+   111→  const g = ((best >> 4) & 15) * 16 + 8
+   112→  const b = (best & 15) * 16 + 8
+   113→  return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')
+   114→}
+   115→
+   116→async function loadPdfIntoPages(
+   117→  file: File,
+   118→  onProgress: (s: string) => void
+   119→): Promise<DocData> {
+   120→  const pdfjs = await import('pdfjs-dist')
+   121→  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+   122→  const buf = await file.arrayBuffer()
+   123→  const doc = await pdfjs.getDocument({
+   124→    data: new Uint8Array(buf.slice(0)),
+   125→    standardFontDataUrl: '/pdfjs-std/',
+   126→    cMapUrl: '/pdfjs-cmaps/',
+   127→    cMapPacked: true,
+   128→    isEvalSupported: false,
+   129→  }).promise
+   130→
+   131→  const pages: PageData[] = []
+   132→  for (let pn = 1; pn <= doc.numPages; pn++) {
+   133→    onProgress(`جاري تجهيز الصفحة ${pn} من ${doc.numPages}…`)
+   134→    const page = await doc.getPage(pn)
+   135→    const p1 = page.getViewport({ scale: 1 })
+   136→    const S = 794 / p1.width
+   137→    const vp = page.getViewport({ scale: S })
+   138→    const c2 = page.getViewport({ scale: S * 2 })
+   139→
+   140→    const canvas = document.createElement('canvas')
+   141→    canvas.width = Math.floor(c2.width)
+   142→    canvas.height = Math.floor(c2.height)
+   143→    const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+   144→    await page.render({ canvasContext: ctx, viewport: c2 }).promise
+   145→    const bg = canvas.toDataURL('image/png')
+   146→
+   147→    const tc = await page.getTextContent()
+   148→    const items: GeoItem[] = []
+   149→    for (const it of tc.items as unknown as Record<string, unknown>[]) {
+   150→      const str = it.str as string
+   151→      if (!str || !str.trim()) continue
+   152→      const tr = it.transform as number[]
+   153→      const tx = pdfjs.Util.transform(vp.transform, tr)
+   154→      const fh = Math.hypot(tx[2], tx[3])
+   155→      if (fh < 3) continue
+   156→      items.push({
+   157→        x: tx[4],
+   158→        y: tx[5],
+   159→        w: ((it.width as number) || 0) * S,
+   160→        h: fh,
+   161→        str,
+   162→      })
+   163→    }
+   164→
+   165→    const width = Math.round(p1.width * S)
+   166→    const height = Math.round(p1.height * S)
+   167→    const lines = buildLineBlocks(items)
+   168→    const blocks: TextBlock[] = lines.map((l, i) => {
+   169→      const patchBox = {
+   170→        x: Math.max(0, l.x - 3),
+   171→        y: Math.max(0, l.baseline - l.size * 1.08),
+   172→        w: l.right - l.x + 6,
+   173→        h: l.size * 1.55,
+   174→      }
+   175→      if (patchBox.y + patchBox.h > height) patchBox.h = height - patchBox.y
+   176→      return {
+   177→        id: `p${pn}-${i}`,
+   178→        page: pn,
+   179→        x: l.x,
+   180→        top: l.baseline - l.size * BASELINE_K,
+   181→        w: l.right - l.x,
+   182→        size: l.size,
+   183→        baseline: l.baseline,
+   184→        text: l.text,
+   185→        color: sampleColor(ctx, l.x, l.baseline - l.size * 1.05, l.right - l.x, l.size * 1.5, width, height),
+   186→        origin: 'pdf' as const,
+   187→        patchBox,
+   188→        dirty: false,
+   189→        deleted: false,
+   190→        rtl: AR_RE.test(l.text),
+   191→      }
+   192→    })
+   193→    pages.push({ num: pn, width, height, bg, blocks, initial: cloneBlocks(blocks) })
+   194→  }
+   195→
+   196→  return { fileName: file.name || 'document.pdf', pages }
+   197→}
+   198→
+   199→/* ================= كتلة نص قابلة للسحب والتعديل ================= */
+   200→
+   201→interface BlockViewProps {
+   202→  b: TextBlock
+   203→  z: number
+   204→  selected: boolean
+   205→  editing: boolean
+   206→  addMode: boolean
+   207→  onSelect: (id: string) => void
+   208→  onBeginEdit: (id: string) => void
+   209→  onEndEdit: (id: string, text: string) => void
+   210→  onMove: (id: string, x: number, top: number) => void
+   211→  onEndMove: () => void
+   212→}
+   213→
+   214→function BlockView({
+   215→  b,
+   216→  z,
+   217→  selected,
+   218→  editing,
+   219→  addMode,
+   220→  onSelect,
+   221→  onBeginEdit,
+   222→  onEndEdit,
+   223→  onMove,
+   224→  onEndMove,
+   225→}: BlockViewProps) {
+   226→  const elRef = useRef<HTMLDivElement>(null)
+   227→  const drag = useRef<{ cx: number; cy: number; ox: number; oy: number; moved: boolean } | null>(null)
+   228→  const liveText = useRef(b.text)
+   229→
+   230→  useEffect(() => {
+   231→    if (editing && elRef.current) {
+   232→      const el = elRef.current
+   233→      el.textContent = b.text
+   234→      liveText.current = b.text
+   235→      el.focus()
+   236→      const range = document.createRange()
+   237→      range.selectNodeContents(el)
+   238→      range.collapse(false)
+   239→      const sel = window.getSelection()
+   240→      sel?.removeAllRanges()
+   241→      sel?.addRange(range)
+   242→    }
+   243→  }, [editing])
+   244→
+   245→  const onPointerDown = (e: React.PointerEvent) => {
+   246→    if (editing || addMode) return
+   247→    e.stopPropagation()
+   248→    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+   249→    drag.current = { cx: e.clientX, cy: e.clientY, ox: b.x, oy: b.top, moved: false }
+   250→    onSelect(b.id)
+   251→  }
+   252→
+   253→  const onPointerMove = (e: React.PointerEvent) => {
+   254→    const d = drag.current
+   255→    if (!d || editing) return
+   256→    const dx = (e.clientX - d.cx) / z
+   257→    const dy = (e.clientY - d.cy) / z
+   258→    if (!d.moved && Math.abs(dx) + Math.abs(dy) > 3) d.moved = true
+   259→    if (d.moved) onMove(b.id, d.ox + dx, d.oy + dy)
+   260→  }
+   261→
+   262→  const onPointerUp = () => {
+   263→    const d = drag.current
+   264→    drag.current = null
+   265→    if (d?.moved) onEndMove()
+   266→  }
+   267→
+   268→  return (
+   269→    <div
+   270→      ref={elRef}
+   271→      data-bid={b.id}
+   272→      className={cn('blk', selected && !editing && 'sel', editing && 'edit')}
+   273→      dir={b.rtl ? 'rtl' : 'ltr'}
+   274→      style={{
+   275→        left: b.x,
+   276→        top: b.top,
+   277→        width: b.w,
+   278→        fontSize: b.size,
+   279→        color: editing || b.dirty || b.origin === 'new' ? b.color : 'transparent',
+   280→        fontFamily: AMIRI_STACK,
+   281→        textAlign: b.rtl ? 'right' : 'left',
+   282→      }}
+   283→      contentEditable={editing}
+   284→      suppressContentEditableWarning
+   285→      spellCheck={false}
+   286→      onPointerDown={onPointerDown}
+   287→      onPointerMove={onPointerMove}
+   288→      onPointerUp={onPointerUp}
+   289→      onDoubleClick={(e) => {
+   290→        e.stopPropagation()
+   291→        if (!editing) onBeginEdit(b.id)
+   292→      }}
+   293→      onInput={(e) => {
+   294→        liveText.current = (e.currentTarget as HTMLElement).innerText
+   295→      }}
+   296→      onBlur={() => {
+   297→        if (editing) onEndEdit(b.id, liveText.current)
+   298→      }}
+   299→      onKeyDown={(e) => {
+   300→        if (e.key === 'Escape') (e.currentTarget as HTMLElement).blur()
+   301→        e.stopPropagation()
+   302→      }}
+   303→    >
+   304→      {!editing ? b.text : null}
+   305→    </div>
+   306→  )
+   307→}
+   308→
+   309→/* ================= الصفحة الرئيسية ================= */
+   310→
+   311→export default function Home() {
+   312→  const [doc, setDoc] = useState<DocData | null>(null)
+   313→  const [busy, setBusy] = useState<null | 'prep' | 'render'>(null)
+   314→  const [prepMsg, setPrepMsg] = useState('')
+   315→  const [dragOver, setDragOver] = useState(false)
+   316→  const [tool, setTool] = useState<'select' | 'add'>('select')
+   317→  const [zoom, setZoom] = useState(1)
+   318→  const [selected, setSelected] = useState<string | null>(null)
+   319→  const [editingId, setEditingId] = useState<string | null>(null)
+   320→  const inputRef = useRef<HTMLInputElement>(null)
+   321→  const zoomTouched = useRef(false)
+   322→  const undoRef = useRef<TextBlock[][][]>([])
+   323→  const docRef = useRef<DocData | null>(null)
+   324→  docRef.current = doc
+   325→
+   326→  useEffect(() => {
+   327→    setZoom(Math.min(1, Math.max(0.4, (window.innerWidth - 48) / 794)))
+   328→    const onResize = () => {
+   329→      if (!zoomTouched.current) {
+   330→        setZoom(Math.min(1, Math.max(0.4, (window.innerWidth - 48) / 794)))
+   331→      }
+   332→    }
+   333→    window.addEventListener('resize', onResize)
+   334→    return () => window.removeEventListener('resize', onResize)
+   335→  }, [])
+   336→
+   337→  /* ---- الحفظ للتصدير ---- */
+   338→  const buildPayload = useCallback(() => {
+   339→    const d = docRef.current
+   340→    if (!d) return null
+   341→    return {
+   342→      fileName: d.fileName,
+   343→      pages: d.pages.map((pg) => ({
+   344→        width: pg.width,
+   345→        height: pg.height,
+   346→        bg: pg.bg,
+   347→        patches: pg.blocks
+   348→          .filter((b) => b.origin === 'pdf' && (b.dirty || b.deleted) && b.patchBox)
+   349→          .map((b) => b.patchBox),
+   350→        texts: pg.blocks
+   351→          .filter((b) => !b.deleted && (b.origin === 'new' || b.dirty) && b.text.trim() !== '')
+   352→          .map((b) => ({
+   353→            x: b.x,
+   354→            top: b.top,
+   355→            w: b.w,
+   356→            size: b.size,
+   357→            color: b.color,
+   358→            text: b.text,
+   359→            rtl: b.rtl || AR_RE.test(b.text),
+   360→          })),
+   361→      })),
+   362→    }
+   363→  }, [])
+   364→
+   365→  useEffect(() => {
+   366→    ;(window as unknown as { __getExportPayload?: unknown }).__getExportPayload = buildPayload
+   367→  }, [buildPayload])
+   368→
+   369→  const pushUndo = useCallback(() => {
+   370→    const d = docRef.current
+   371→    if (!d) return
+   372→    undoRef.current.push(d.pages.map((p) => cloneBlocks(p.blocks)))
+   373→    if (undoRef.current.length > 30) undoRef.current.shift()
+   374→  }, [])
+   375→
+   376→  const undo = useCallback(() => {
+   377→    const snap = undoRef.current.pop()
+   378→    if (!snap) {
+   379→      toast.info('مفيش حاجة للتراجع عنها')
+   380→      return
+   381→    }
+   382→    setDoc((d) =>
+   383→      d
+   384→        ? {
+   385→            ...d,
+   386→            pages: d.pages.map((p, i) => ({ ...p, blocks: cloneBlocks(snap[i] || []) })),
+   387→          }
+   388→        : d
+   389→    )
+   390→    setSelected(null)
+   391→    setEditingId(null)
+   392→  }, [])
+   393→
+   394→  const handleFile = useCallback(async (file: File) => {
+   395→    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+   396→    if (!isPdf) {
+   397→      toast.error('من فضلك اختر ملف PDF')
+   398→      return
+   399→    }
+   400→    if (file.size > MAX_SIZE) {
+   401→      toast.error('حجم الملف أكبر من 30 ميجابايت')
+   402→      return
+   403→    }
+   404→    setBusy('prep')
+   405→    setPrepMsg('جاري فتح الملف…')
+   406→    undoRef.current = []
+   407→    setSelected(null)
+   408→    setEditingId(null)
+   409→    try {
+   410→      const loaded = await loadPdfIntoPages(file, setPrepMsg)
+   411→      setDoc(loaded)
+   412→      toast.success(`تم تجهيز ${loaded.pages.length} صفحة — دوس على أي كلام لتعديله`)
+   413→    } catch (err) {
+   414→      console.error(err)
+   415→      toast.error('تعذّر قراءة الملف — تأكد أنه PDF غير تالف وغير محمي بكلمة سر')
+   416→    } finally {
+   417→      setBusy(null)
+   418→    }
+   419→  }, [])
+   420→
+   421→  const loadSample = useCallback(async () => {
+   422→    setBusy('prep')
+   423→    setPrepMsg('جاري تحميل الملف النموذجي…')
+   424→    try {
+   425→      const res = await fetch('/sample.pdf')
+   426→      const blob = await res.blob()
+   427→      await handleFile(new File([blob], 'بحث خصائص لغة الإعلام.pdf', { type: 'application/pdf' }))
+   428→    } catch {
+   429→      toast.error('تعذّر تحميل الملف النموذجي')
+   430→      setBusy(null)
+   431→    }
+   432→  }, [handleFile])
+   433→
+   434→  /* ---- تعديلات الكتل ---- */
+   435→
+   436→  const mutateBlocks = useCallback(
+   437→    (pid: number, fn: (bs: TextBlock[]) => TextBlock[]) => {
+   438→      setDoc((d) =>
+   439→        d
+   440→          ? {
+   441→              ...d,
+   442→              pages: d.pages.map((p) => (p.num === pid ? { ...p, blocks: fn(p.blocks) } : p)),
+   443→            }
+   444→          : d
+   445→      )
+   446→    },
+   447→    []
+   448→  )
+   449→
+   450→  const onMove = useCallback(
+   451→    (id: string, x: number, top: number) => {
+   452→      const d = docRef.current
+   453→      if (!d) return
+   454→      const pg = d.pages.find((p) => p.blocks.some((b) => b.id === id))
+   455→      if (!pg) return
+   456→      mutateBlocks(pg.num, (bs) =>
+   457→        bs.map((b) =>
+   458→          b.id === id
+   459→            ? { ...b, x: Math.round(x), top: Math.round(top), baseline: Math.round(top + b.size * BASELINE_K), dirty: true }
+   460→            : b
+   461→        )
+   462→      )
+   463→    },
+   464→    [mutateBlocks]
+   465→  )
+   466→
+   467→  const onEndMove = useCallback(() => pushUndo(), [pushUndo])
+   468→
+   469→  const onBeginEdit = useCallback((id: string) => {
+   470→    setEditingId(id)
+   471→    setSelected(id)
+   472→  }, [])
+   473→
+   474→  const onEndEdit = useCallback(
+   475→    (id: string, text: string) => {
+   476→      setEditingId(null)
+   477→      const d = docRef.current
+   478→      if (!d) return
+   479→      const pg = d.pages.find((p) => p.blocks.some((b) => b.id === id))
+   480→      if (!pg) return
+   481→      const cur = pg.blocks.find((b) => b.id === id)
+   482→      if (!cur) return
+   483→      const clean = text.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n')
+   484→      if (clean === cur.text) return
+   485→      pushUndo()
+   486→      if (clean.trim() === '' && cur.origin === 'new') {
+   487→        mutateBlocks(pg.num, (bs) => bs.filter((b) => b.id !== id))
+   488→        setSelected(null)
+   489→        return
+   490→      }
+   491→      mutateBlocks(pg.num, (bs) =>
+   492→        bs.map((b) =>
+   493→          b.id === id
+   494→            ? {
+   495→                ...b,
+   496→                text: clean,
+   497→                dirty: true,
+   498→                deleted: clean.trim() === '',
+   499→                rtl: AR_RE.test(clean),
+   500→              }
+   501→            : b
+   502→        )
+   503→      )
+   504→    },
+   505→    [mutateBlocks, pushUndo]
+   506→  )
+   507→
+   508→  const deleteSelected = useCallback(() => {
+   509→    const d = docRef.current
+   510→    if (!d || !selected || editingId) return
+   511→    const pg = d.pages.find((p) => p.blocks.some((b) => b.id === selected))
+   512→    if (!pg) return
+   513→    pushUndo()
+   514→    mutateBlocks(pg.num, (bs) => {
+   515→      const b = bs.find((x) => x.id === selected)
+   516→      if (!b) return bs
+   517→      if (b.origin === 'new') return bs.filter((x) => x.id !== selected)
+   518→      return bs.map((x) => (x.id === selected ? { ...x, deleted: true, dirty: true } : x))
+   519→    })
+   520→    setSelected(null)
+   521→  }, [selected, editingId, mutateBlocks, pushUndo])
+   522→
+   523→  const applyColor = useCallback(
+   524→    (color: string) => {
+   525→      const d = docRef.current
+   526→      if (!d || !selected) return
+   527→      const pg = d.pages.find((p) => p.blocks.some((b) => b.id === selected))
+   528→      if (!pg) return
+   529→      mutateBlocks(pg.num, (bs) =>
+   530→        bs.map((b) => (b.id === selected ? { ...b, color, dirty: true } : b))
+   531→      )
+   532→    },
+   533→    [selected, mutateBlocks]
+   534→  )
+   535→
+   536→  const resetPage = useCallback(
+   537→    (pid: number) => {
+   538→      const d = docRef.current
+   539→      if (!d) return
+   540→      const pg = d.pages.find((p) => p.num === pid)
+   541→      if (!pg) return
+   542→      pushUndo()
+   543→      mutateBlocks(pid, () => cloneBlocks(pg.initial))
+   544→      setSelected(null)
+   545→      setEditingId(null)
+   546→      toast.success('تمت استعادة الصفحة كما كانت')
+   547→    },
+   548→    [mutateBlocks, pushUndo]
+   549→  )
+   550→
+   551→  /* ---- اختصارات ---- */
+   552→  const saveRef = useRef<() => void>(() => {})
+   553→  const savePdf = useCallback(async () => {
+   554→    const payload = buildPayload()
+   555→    if (!payload || busy) return
+   556→    setBusy('render')
+   557→    try {
+   558→      const res = await fetch('/api/render', {
+   559→        method: 'POST',
+   560→        headers: { 'Content-Type': 'application/json' },
+   561→        body: JSON.stringify(payload),
+   562→      })
+   563→      if (!res.ok) {
+   564→        const data = await res.json().catch(() => null)
+   565→        toast.error(data?.error || 'تعذّر توليد ملف PDF')
+   566→        return
+   567→      }
+   568→      const blob = await res.blob()
+   569→      const url = URL.createObjectURL(blob)
+   570→      const a = document.createElement('a')
+   571→      a.href = url
+   572→      a.download = `${docRef.current?.fileName.replace(/\.pdf$/i, '') || 'document'}-معدل.pdf`
+   573→      document.body.appendChild(a)
+   574→      a.click()
+   575→      a.remove()
+   576→      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+   577→      toast.success('تم حفظ الـ PDF بنفس شكل الأصل ومعاه تعديلاتك')
+   578→    } catch {
+   579→      toast.error('حدث خطأ أثناء الحفظ — حاول مرة أخرى')
+   580→    } finally {
+   581→      setBusy(null)
+   582→    }
+   583→  }, [buildPayload, busy])
+   584→  saveRef.current = () => {
+   585→    void savePdf()
+   586→  }
+   587→
+   588→  useEffect(() => {
+   589→    const onKey = (e: KeyboardEvent) => {
+   590→      const tag = (e.target as HTMLElement)?.tagName
+   591→      const editingNow = !!editingId
+   592→      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+   593→        e.preventDefault()
+   594→        saveRef.current()
+   595→        return
+   596→      }
+   597→      if (editingNow || (tag === 'INPUT' || tag === 'TEXTAREA')) return
+   598→      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+   599→        e.preventDefault()
+   600→        undo()
+   601→      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+   602→        if (selected) {
+   603→          e.preventDefault()
+   604→          deleteSelected()
+   605→        }
+   606→      } else if (e.key === 'Escape') {
+   607→        setSelected(null)
+   608→      }
+   609→    }
+   610→    window.addEventListener('keydown', onKey)
+   611→    return () => window.removeEventListener('keydown', onKey)
+   612→  }, [editingId, selected, undo, deleteSelected])
+   613→
+   614→  /* ---- إضافة نص جديد ---- */
+   615→  const addTextAt = useCallback(
+   616→    (pid: number, px: number, py: number) => {
+   617→      const d = docRef.current
+   618→      if (!d) return
+   619→      const pg = d.pages.find((p) => p.num === pid)
+   620→      if (!pg) return
+   621→      const size = pg.blocks.length
+   622→        ? [...pg.blocks].sort((a, b) => a.size - b.size)[Math.floor(pg.blocks.length / 2)].size
+   623→        : 19
+   624→      const id = `p${pid}-new-${Date.now()}`
+   625→      pushUndo()
+   626→      const blk: TextBlock = {
+   627→        id,
+   628→        page: pid,
+   629→        x: Math.round(px),
+   630→        top: Math.round(py - size * BASELINE_K),
+   631→        w: Math.max(120, Math.round(size * 8)),
+   632→        size,
+   633→        baseline: Math.round(py),
+   634→        text: '',
+   635→        color: '#111111',
+   636→        origin: 'new',
+   637→        dirty: true,
+   638→        deleted: false,
+   639→        rtl: true,
+   640→      }
+   641→      mutateBlocks(pid, (bs) => [...bs, blk])
+   642→      setTool('select')
+   643→      setSelected(id)
+   644→      setEditingId(id)
+   645→    },
+   646→    [mutateBlocks, pushUndo]
+   647→  )
+   648→
+   649→  const dirtyCount = doc
+   650→    ? doc.pages.reduce((n, p) => n + p.blocks.filter((b) => b.dirty || b.deleted || b.origin === 'new').length, 0)
+   651→    : 0
+   652→
+   653→  /* ================= الواجهة ================= */
+   654→
+   655→  return (
+   656→    <div className="flex min-h-screen flex-col bg-zinc-100">
+   657→      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 backdrop-blur">
+   658→        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
+   659→          <div className="flex items-center gap-2.5">
+   660→            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white">
+   661→              <FileText className="h-5 w-5" aria-hidden="true" />
+   662→            </div>
+   663→            <div className="leading-tight">
+   664→              <div className="text-[15px] font-bold">محرّر البحث</div>
+   665→              <div className="hidden text-[11px] text-zinc-500 sm:block">
+   666→                تعديل PDF فوق الأصل نفسه — بالصور والشعارات
+   667→              </div>
+   668→            </div>
+   669→          </div>
+   670→          {doc && (
+   671→            <div className="flex items-center gap-2">
+   672→              <span className="hidden max-w-[220px] truncate text-xs text-zinc-500 md:block">
+   673→                {doc.fileName}
+   674→              </span>
+   675→              {dirtyCount > 0 && (
+   676→                <Badge variant="secondary" className="hidden bg-emerald-100 text-emerald-700 sm:inline-flex">
+   677→                  {dirtyCount} تعديل
+   678→                </Badge>
+   679→              )}
+   680→              <Button
+   681→                variant="outline"
+   682→                size="sm"
+   683→                onClick={() => {
+   684→                  setDoc(null)
+   685→                  setSelected(null)
+   686→                  setEditingId(null)
+   687→                  undoRef.current = []
+   688→                  if (inputRef.current) inputRef.current.value = ''
+   689→                }}
+   690→              >
+   691→                <Plus className="h-4 w-4" aria-hidden="true" />
+   692→                ملف جديد
+   693→              </Button>
+   694→              <Button size="sm" onClick={() => void savePdf()} disabled={busy !== null}>
+   695→                {busy === 'render' ? (
+   696→                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+   697→                ) : (
+   698→                  <FileDown className="h-4 w-4" aria-hidden="true" />
+   699→                )}
+   700→                {busy === 'render' ? 'جاري الحفظ…' : 'حفظ PDF'}
+   701→              </Button>
+   702→            </div>
+   703→          )}
+   704→        </div>
+   705→      </header>
+   706→
+   707→      {!doc ? (
+   708→        <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:py-14">
+   709→          <div className="mb-8 text-center">
+   710→            <h1 className="mb-3 text-2xl font-extrabold leading-snug text-zinc-900 sm:text-3xl">
+   711→              عدّل أي ملف PDF فوق الأصل نفسه… واحفظه كما هو
+   712→            </h1>
+   713→            <p className="mx-auto max-w-xl text-[15px] leading-7 text-zinc-600">
+   714→              الموقع يعرض كل صفحة بصورها وشعاراتها وكل تفاصيلها، ودوس على أي كلمة تعدّلها،
+   715→              واسحب أي مربع كلام وحرّكه في أي مكان، ولما تحفظ كل حاجة تفضل في مكانها.
+   716→            </p>
+   717→          </div>
+   718→
+   719→          <div
+   720→            role="button"
+   721→            tabIndex={0}
+   722→            aria-label="رفع ملف PDF"
+   723→            onClick={() => busy === null && inputRef.current?.click()}
+   724→            onKeyDown={(e) => {
+   725→              if (e.key === 'Enter' || e.key === ' ') {
+   726→                e.preventDefault()
+   727→                inputRef.current?.click()
+   728→              }
+   729→            }}
+   730→            onDragOver={(e) => {
+   731→              e.preventDefault()
+   732→              setDragOver(true)
+   733→            }}
+   734→            onDragLeave={() => setDragOver(false)}
+   735→            onDrop={(e) => {
+   736→              e.preventDefault()
+   737→              setDragOver(false)
+   738→              const f = e.dataTransfer.files?.[0]
+   739→              if (f && busy === null) void handleFile(f)
+   740→            }}
+   741→            className={cn(
+   742→              'cursor-pointer rounded-2xl border-2 border-dashed bg-white p-10 text-center transition-colors sm:p-14',
+   743→              dragOver ? 'border-emerald-500 bg-emerald-50' : 'border-zinc-300 hover:border-emerald-400'
+   744→            )}
+   745→          >
+   746→            <input
+   747→              ref={inputRef}
+   748→              type="file"
+   749→              accept=".pdf,application/pdf"
+   750→              className="hidden"
+   751→              onChange={(e) => {
+   752→                const f = e.target.files?.[0]
+   753→                if (f) void handleFile(f)
+   754→              }}
+   755→            />
+   756→            {busy === 'prep' ? (
+   757→              <div className="flex flex-col items-center gap-3 py-4">
+   758→                <Loader2 className="h-10 w-10 animate-spin text-emerald-600" aria-hidden="true" />
+   759→                <p className="text-sm font-medium text-zinc-600">{prepMsg}</p>
+   760→              </div>
+   761→            ) : (
+   762→              <>
+   763→                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+   764→                  <FileUp className="h-7 w-7" aria-hidden="true" />
+   765→                </div>
+   766→                <div className="mb-1 text-lg font-bold text-zinc-900">
+   767→                  اسحب ملف PDF هنا أو اضغط للاختيار
+   768→                </div>
+   769→                <div className="mb-5 text-sm text-zinc-500">
+   770→                  ملفات نصية (غير ممسوحة ضوئيًا) — حتى 30 ميجابايت
+   771→                </div>
+   772→                <div className="flex flex-wrap items-center justify-center gap-2">
+   773→                  <Button type="button">اختيار ملف</Button>
+   774→                  <Button
+   775→                    type="button"
+   776→                    variant="outline"
+   777→                    onClick={(e) => {
+   778→                      e.stopPropagation()
+   779→                      void loadSample()
+   780→                    }}
+   781→                  >
+   782→                    <Hand className="h-4 w-4" aria-hidden="true" />
+   783→                    تجربة بملف نموذجي
+   784→                  </Button>
+   785→                </div>
+   786→              </>
+   787→            )}
+   788→          </div>
+   789→        </main>
+   790→      ) : (
+   791→        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5">
+   792→          {/* شريط الأدوات */}
+   793→          <div className="mb-4 flex flex-wrap items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm">
+   794→            <Button
+   795→              variant={tool === 'select' ? 'default' : 'outline'}
+   796→              size="sm"
+   797→              onClick={() => setTool('select')}
+   798→            >
+   799→              <MousePointer2 className="h-4 w-4" aria-hidden="true" />
+   800→              تحرير وسحب
+   801→            </Button>
+   802→            <Button
+   803→              variant={tool === 'add' ? 'default' : 'outline'}
+   804→              size="sm"
+   805→              onClick={() => setTool(tool === 'add' ? 'select' : 'add')}
+   806→            >
+   807→              <TypeIcon className="h-4 w-4" aria-hidden="true" />
+   808→              إضافة نص
+   809→            </Button>
+   810→            <Button variant="outline" size="sm" onClick={undo}>
+   811→              <Undo2 className="h-4 w-4" aria-hidden="true" />
+   812→              تراجع
+   813→            </Button>
+   814→            <label className="flex items-center gap-1.5 rounded-md border border-zinc-200 px-2 py-1.5 text-xs text-zinc-600">
+   815→              اللون
+   816→              <input
+   817→                type="color"
+   818→                aria-label="لون النص المحدد"
+   819→                defaultValue="#111111"
+   820→                className="h-6 w-8 cursor-pointer rounded border-0 bg-transparent p-0"
+   821→                onChange={(e) => applyColor(e.target.value)}
+   822→                disabled={!selected || !!editingId}
+   823→              />
+   824→            </label>
+   825→            <label className="flex items-center gap-1.5 rounded-md border border-zinc-200 px-2 py-1.5 text-xs text-zinc-600">
+   826→              <ZoomIn className="h-3.5 w-3.5" aria-hidden="true" />
+   827→              <select
+   828→                aria-label="التكبير"
+   829→                value={zoom}
+   830→                onChange={(e) => {
+   831→                  zoomTouched.current = true
+   832→                  setZoom(Number(e.target.value))
+   833→                }}
+   834→                className="bg-transparent text-xs outline-none"
+   835→              >
+   836→                <option value={0.45}>45%</option>
+   837→                <option value={0.65}>65%</option>
+   838→                <option value={0.8}>80%</option>
+   839→                <option value={1}>100%</option>
+   840→                <option value={1.3}>130%</option>
+   841→              </select>
+   842→            </label>
+   843→            <span className="hidden px-2 text-[11px] leading-4 text-zinc-400 lg:block">
+   844→              دوس دوبل كليك على الكلام لتعديله — واسحبه لتحريكه — Delete للحذف
+   845→            </span>
+   846→          </div>
+   847→
+   848→          {/* الصفحات */}
+   849→          <div className="flex flex-col items-center gap-8">
+   850→            {doc.pages.map((pg) => (
+   851→              <div
+   852→                key={pg.num}
+   853→                style={{ width: pg.width * zoom, height: pg.height * zoom + 30 }}
+   854→                className="relative"
+   855→              >
+   856→                <div className="absolute -top-6 right-0 left-0 flex items-center justify-between px-1">
+   857→                  <span className="text-xs font-semibold text-zinc-500">صفحة {pg.num}</span>
+   858→                  <Button
+   859→                    variant="ghost"
+   860→                    size="sm"
+   861→                    className="h-7 px-2 text-[11px] text-zinc-500"
+   862→                    onClick={() => resetPage(pg.num)}
+   863→                  >
+   864→                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
+   865→                    استعادة الصفحة
+   866→                  </Button>
+   867→                </div>
+   868→                <div
+   869→                  className="page-surface absolute left-0 top-0 bg-white shadow-[0_2px_16px_rgba(0,0,0,.14)]"
+   870→                  style={{ width: pg.width, height: pg.height, transform: `scale(${zoom})` }}
+   871→                  onPointerDown={(e) => {
+   872→                    if (tool === 'add') {
+   873→                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+   874→                      addTextAt(pg.num, (e.clientX - rect.left) / zoom, (e.clientY - rect.top) / zoom)
+   875→                    } else {
+   876→                      setSelected(null)
+   877→                    }
+   878→                  }}
+   879→                >
+   880→                  <img
+   881→                    src={pg.bg}
+   882→                    alt={`صفحة ${pg.num}`}
+   883→                    draggable={false}
+   884→                    className="pointer-events-none absolute inset-0 h-full w-full select-none"
+   885→                  />
+   886→                  {pg.blocks
+   887→                    .filter((b) => b.origin === 'pdf' && (b.dirty || b.deleted) && b.patchBox)
+   888→                    .map((b) => (
+   889→                      <div
+   890→                        key={`patch-${b.id}`}
+   891→                        className="absolute bg-white"
+   892→                        style={{ left: b.patchBox!.x, top: b.patchBox!.y, width: b.patchBox!.w, height: b.patchBox!.h }}
+   893→                      />
+   894→                    ))}
+   895→                  {pg.blocks
+   896→                    .filter((b) => !b.deleted)
+   897→                    .map((b) => (
+   898→                      <BlockView
+   899→                        key={b.id}
+   900→                        b={b}
+   901→                        z={zoom}
+   902→                        selected={selected === b.id}
+   903→                        editing={editingId === b.id}
+   904→                        addMode={tool === 'add'}
+   905→                        onSelect={setSelected}
+   906→                        onBeginEdit={onBeginEdit}
+   907→                        onEndEdit={onEndEdit}
+   908→                        onMove={onMove}
+   909→                        onEndMove={onEndMove}
+   910→                      />
+   911→                    ))}
+   912→                </div>
+   913→              </div>
+   914→            ))}
+   915→          </div>
+   916→        </main>
+   917→      )}
+   918→
+   919→      <footer className="mt-auto border-t border-zinc-200 bg-white py-4">
+   920→        <p className="px-4 text-center text-xs leading-5 text-zinc-500">
+   921→          المعالجة تتم مباشرة في متصفحك — الملف لا يُخزَّن على الموقع — التصدير يحافظ على صور
+   922→          ورسومات كل صفحة كما هي مع تعديلاتك
+   923→        </p>
+   924→      </footer>
+   925→    </div>
+   926→  )
+   927→}
+   928→

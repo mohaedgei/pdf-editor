@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -121,7 +121,7 @@ async function loadPdfIntoPages(
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
   const buf = await file.arrayBuffer()
   const doc = await pdfjs.getDocument({
-    data: new Uint8Array(buf.slice(0)),
+    data: new Uint8Array(buf),
     standardFontDataUrl: '/pdfjs-std/',
     cMapUrl: '/pdfjs-cmaps/',
     cMapPacked: true,
@@ -135,14 +135,19 @@ async function loadPdfIntoPages(
     const p1 = page.getViewport({ scale: 1 })
     const S = 794 / p1.width
     const vp = page.getViewport({ scale: S })
-    const c2 = page.getViewport({ scale: S * 2 })
+    // سقف لدقة الصورة: أطول ضلع 2600px — يمنع انفجار الذاكرة في الصفحات الضخمة
+    const s2 = Math.min(S * 2, 2600 / Math.max(p1.width, p1.height))
+    const c2 = page.getViewport({ scale: s2 })
 
     const canvas = document.createElement('canvas')
     canvas.width = Math.floor(c2.width)
     canvas.height = Math.floor(c2.height)
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!
-    await page.render({ canvasContext: ctx, viewport: c2 }).promise
-    const bg = canvas.toDataURL('image/png')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    await page.render({ canvasContext: ctx, viewport: c2, background: '#FFFFFF' }).promise
+    // JPEG مضغوط بدل PNG: أصفار حجم الخلفية ~٦ أضعاف مع ثبات المظهر (الصفحات بيضاء)
+    const bg = canvas.toDataURL('image/jpeg', 0.9)
 
     const tc = await page.getTextContent()
     const items: GeoItem[] = []
@@ -191,6 +196,11 @@ async function loadPdfIntoPages(
       }
     })
     pages.push({ num: pn, width, height, bg, blocks, initial: cloneBlocks(blocks) })
+    // تحرير ذاكرة الـ canvas بعد انتهاء عينات الألوان — بدل تراكمها حتى نهاية الملف
+    canvas.width = 0
+    canvas.height = 0
+    // فسحة للواجهة تعرض رسالة التقدم — بدل تجميد الشاشة في الملفات الطويلة
+    await new Promise((r) => setTimeout(r, 0))
   }
 
   return { fileName: file.name || 'document.pdf', pages }
@@ -208,10 +218,10 @@ interface BlockViewProps {
   onBeginEdit: (id: string) => void
   onEndEdit: (id: string, text: string) => void
   onMove: (id: string, x: number, top: number) => void
-  onEndMove: () => void
+  onBeginMove: () => void
 }
 
-function BlockView({
+function BlockViewInner({
   b,
   z,
   selected,
@@ -221,10 +231,11 @@ function BlockView({
   onBeginEdit,
   onEndEdit,
   onMove,
-  onEndMove,
+  onBeginMove,
 }: BlockViewProps) {
   const elRef = useRef<HTMLDivElement>(null)
   const drag = useRef<{ cx: number; cy: number; ox: number; oy: number; moved: boolean } | null>(null)
+  const raf = useRef<number>(0)
   const liveText = useRef(b.text)
 
   useEffect(() => {
@@ -232,13 +243,17 @@ function BlockView({
       const el = elRef.current
       el.textContent = b.text
       liveText.current = b.text
-      el.focus()
-      const range = document.createRange()
-      range.selectNodeContents(el)
-      range.collapse(false)
-      const sel = window.getSelection()
-      sel?.removeAllRanges()
-      sel?.addRange(range)
+      // فوكس بعد استقرار الأحداث — أي mousedown في نفس اللحظة ممكن يسرق الفوكس
+      const t = setTimeout(() => {
+        el.focus()
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        range.collapse(false)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      }, 0)
+      return () => clearTimeout(t)
     }
   }, [editing])
 
@@ -255,14 +270,24 @@ function BlockView({
     if (!d || editing) return
     const dx = (e.clientX - d.cx) / z
     const dy = (e.clientY - d.cy) / z
-    if (!d.moved && Math.abs(dx) + Math.abs(dy) > 3) d.moved = true
-    if (d.moved) onMove(b.id, d.ox + dx, d.oy + dy)
+    if (!d.moved && Math.abs(dx) + Math.abs(dy) > 3) {
+      d.moved = true
+      // لقطة التراجع قبل أول إزاحة فعلية — بدل ما كانت تُخزن بعد الحركة (فالتراجع مكانش بيغيّر حاجة)
+      onBeginMove()
+    }
+    if (!d.moved) return
+    // خنق بـ rAF: تحديث واحد لكل إطار رسم — بدل تحديث لكل حدث ماوس (كان بيتجمد)
+    const ox = d.ox
+    const oy = d.oy
+    const id = b.id
+    cancelAnimationFrame(raf.current)
+    raf.current = requestAnimationFrame(() => onMove(id, ox + dx, oy + dy))
   }
 
   const onPointerUp = () => {
     const d = drag.current
     drag.current = null
-    if (d?.moved) onEndMove()
+    cancelAnimationFrame(raf.current)
   }
 
   return (
@@ -305,6 +330,145 @@ function BlockView({
     </div>
   )
 }
+
+/** memo: الكتلة لا تُعاد رسمها إلا إذا تغيّرت هي نفسها — السحب يتحرك بسلاسة مع مئات الكتل */
+const BlockView = memo(BlockViewInner)
+
+/* ================= صفحة بعرض تدريجي (lazy) ================= */
+
+/** الصفحة لا تُحمّل صورتها وكتلها إلا لما تقرب من الشاشة — يمنع تجمد التاب في الملفات الطويلة */
+function PageSurfaceInner({
+  pg,
+  zoom,
+  selected,
+  editingId,
+  tool,
+  onSelect,
+  onBeginEdit,
+  onEndEdit,
+  onMove,
+  onBeginMove,
+  onReset,
+  onAddAt,
+  onTapEmpty,
+}: {
+  pg: PageData
+  zoom: number
+  selected: string | null
+  editingId: string | null
+  tool: 'select' | 'add'
+  onSelect: (id: string) => void
+  onBeginEdit: (id: string) => void
+  onEndEdit: (id: string, text: string) => void
+  onMove: (id: string, x: number, top: number) => void
+  onBeginMove: () => void
+  onReset: (pid: number) => void
+  onAddAt: (pid: number, x: number, y: number) => void
+  onTapEmpty: () => void
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [near, setNear] = useState(false)
+
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el || near) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((en) => en.isIntersecting)) {
+          setNear(true)
+          io.disconnect()
+        }
+      },
+      { rootMargin: '1400px 0px' }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [near])
+
+  return (
+    <div
+      ref={wrapRef}
+      style={{ width: pg.width * zoom, height: pg.height * zoom + 30 }}
+      className="relative"
+    >
+      <div className="absolute -top-6 right-0 left-0 flex items-center justify-between px-1">
+        <span className="text-xs font-semibold text-zinc-500">صفحة {pg.num}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-[11px] text-zinc-500"
+          onClick={() => onReset(pg.num)}
+        >
+          <RotateCcw className="h-3 w-3" aria-hidden="true" />
+          استعادة الصفحة
+        </Button>
+      </div>
+      {near ? (
+        <div
+          className="page-surface absolute left-0 top-0 bg-white shadow-[0_2px_16px_rgba(0,0,0,.14)]"
+          style={{ width: pg.width, height: pg.height, transform: `scale(${zoom})` }}
+          onPointerDown={(e) => {
+            if (tool === 'add') {
+              // منع السلوك الافتراضي: mousedown التالي بيسرق فوكس الكتلة الجديدة ويقفل التحرير فورًا
+              e.preventDefault()
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+              onAddAt(pg.num, (e.clientX - rect.left) / zoom, (e.clientY - rect.top) / zoom)
+            } else {
+              onTapEmpty()
+            }
+          }}
+        >
+          <img
+            src={pg.bg}
+            alt={`صفحة ${pg.num}`}
+            draggable={false}
+            decoding="async"
+            className="pointer-events-none absolute inset-0 h-full w-full select-none"
+          />
+          {pg.blocks
+            .filter((b) => b.origin === 'pdf' && (b.dirty || b.deleted) && b.patchBox)
+            .map((b) => (
+              <div
+                key={`patch-${b.id}`}
+                className="absolute bg-white"
+                style={{
+                  left: b.patchBox!.x,
+                  top: b.patchBox!.y,
+                  width: b.patchBox!.w,
+                  height: b.patchBox!.h,
+                }}
+              />
+            ))}
+          {pg.blocks
+            .filter((b) => !b.deleted)
+            .map((b) => (
+              <BlockView
+                key={b.id}
+                b={b}
+                z={zoom}
+                selected={selected === b.id}
+                editing={editingId === b.id}
+                addMode={tool === 'add'}
+                onSelect={onSelect}
+                onBeginEdit={onBeginEdit}
+                onEndEdit={onEndEdit}
+                onMove={onMove}
+                onBeginMove={onBeginMove}
+              />
+            ))}
+        </div>
+      ) : (
+        <div
+          className="absolute left-0 top-0 animate-pulse rounded-sm border border-zinc-200 bg-zinc-50"
+          style={{ width: pg.width * zoom, height: pg.height * zoom }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** memo: الصفحة لا تُعاد رسمها إلا إذا تغيّرت بياناتها هي — السحب في صفحة لا يلمس الباقي */
+const PageSurface = memo(PageSurfaceInner)
 
 /* ================= الصفحة الرئيسية ================= */
 
@@ -464,7 +628,7 @@ export default function Home() {
     [mutateBlocks]
   )
 
-  const onEndMove = useCallback(() => pushUndo(), [pushUndo])
+  const onBeginMove = useCallback(() => pushUndo(), [pushUndo])
 
   const onBeginEdit = useCallback((id: string) => {
     setEditingId(id)
@@ -645,6 +809,8 @@ export default function Home() {
     },
     [mutateBlocks, pushUndo]
   )
+
+  const tapEmpty = useCallback(() => setSelected(null), [])
 
   const dirtyCount = doc
     ? doc.pages.reduce((n, p) => n + p.blocks.filter((b) => b.dirty || b.deleted || b.origin === 'new').length, 0)
@@ -845,72 +1011,25 @@ export default function Home() {
             </span>
           </div>
 
-          {/* الصفحات */}
+          {/* الصفحات — تُحمّل تدريجيًا مع التمرير */}
           <div className="flex flex-col items-center gap-8">
             {doc.pages.map((pg) => (
-              <div
+              <PageSurface
                 key={pg.num}
-                style={{ width: pg.width * zoom, height: pg.height * zoom + 30 }}
-                className="relative"
-              >
-                <div className="absolute -top-6 right-0 left-0 flex items-center justify-between px-1">
-                  <span className="text-xs font-semibold text-zinc-500">صفحة {pg.num}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-[11px] text-zinc-500"
-                    onClick={() => resetPage(pg.num)}
-                  >
-                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                    استعادة الصفحة
-                  </Button>
-                </div>
-                <div
-                  className="page-surface absolute left-0 top-0 bg-white shadow-[0_2px_16px_rgba(0,0,0,.14)]"
-                  style={{ width: pg.width, height: pg.height, transform: `scale(${zoom})` }}
-                  onPointerDown={(e) => {
-                    if (tool === 'add') {
-                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                      addTextAt(pg.num, (e.clientX - rect.left) / zoom, (e.clientY - rect.top) / zoom)
-                    } else {
-                      setSelected(null)
-                    }
-                  }}
-                >
-                  <img
-                    src={pg.bg}
-                    alt={`صفحة ${pg.num}`}
-                    draggable={false}
-                    className="pointer-events-none absolute inset-0 h-full w-full select-none"
-                  />
-                  {pg.blocks
-                    .filter((b) => b.origin === 'pdf' && (b.dirty || b.deleted) && b.patchBox)
-                    .map((b) => (
-                      <div
-                        key={`patch-${b.id}`}
-                        className="absolute bg-white"
-                        style={{ left: b.patchBox!.x, top: b.patchBox!.y, width: b.patchBox!.w, height: b.patchBox!.h }}
-                      />
-                    ))}
-                  {pg.blocks
-                    .filter((b) => !b.deleted)
-                    .map((b) => (
-                      <BlockView
-                        key={b.id}
-                        b={b}
-                        z={zoom}
-                        selected={selected === b.id}
-                        editing={editingId === b.id}
-                        addMode={tool === 'add'}
-                        onSelect={setSelected}
-                        onBeginEdit={onBeginEdit}
-                        onEndEdit={onEndEdit}
-                        onMove={onMove}
-                        onEndMove={onEndMove}
-                      />
-                    ))}
-                </div>
-              </div>
+                pg={pg}
+                zoom={zoom}
+                selected={selected}
+                editingId={editingId}
+                tool={tool}
+                onSelect={setSelected}
+                onBeginEdit={onBeginEdit}
+                onEndEdit={onEndEdit}
+                onMove={onMove}
+                onBeginMove={onBeginMove}
+                onReset={resetPage}
+                onAddAt={addTextAt}
+                onTapEmpty={tapEmpty}
+              />
             ))}
           </div>
         </main>
