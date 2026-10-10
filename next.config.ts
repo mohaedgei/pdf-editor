@@ -1,9 +1,18 @@
 import type { NextConfig } from "next";
 
+/* وضع STATIC_EXPORT=1: بناء ثابت لاستضافة GitHub Pages
+   (الموقع كله يعمل في المتصفح — لا يحتاج سيرفر أو API) */
+const isStatic = process.env.STATIC_EXPORT === "1";
+
 const nextConfig: NextConfig = {
-  output: "standalone",
+  ...(isStatic
+    ? {
+        output: "export" as const,
+        basePath: process.env.NEXT_PUBLIC_BASE_PATH || undefined,
+        images: { unoptimized: true },
+      }
+    : { output: "standalone" as const }),
   serverExternalPackages: ["pdfjs-dist"],
-  /* config options here */
   typescript: {
     ignoreBuildErrors: true,
   },

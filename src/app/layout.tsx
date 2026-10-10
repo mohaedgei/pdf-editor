@@ -13,6 +13,16 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
+/* خط أميري بأوجهه الأربعة — inline عشان يعمل مع basePath في GitHub Pages */
+const AMIRI_FACES = `
+@font-face{font-family:'AmiriLocal';src:url('${BASE}/fonts/amiri-arabic-400-normal.ttf') format('truetype');font-weight:400;font-style:normal;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+08A0-08FF,U+FB50-FDFF,U+FE70-FEFF}
+@font-face{font-family:'AmiriLocal';src:url('${BASE}/fonts/amiri-arabic-700-normal.ttf') format('truetype');font-weight:700;font-style:normal;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+08A0-08FF,U+FB50-FDFF,U+FE70-FEFF}
+@font-face{font-family:'AmiriLocal';src:url('${BASE}/fonts/amiri-latin-400-normal.ttf') format('truetype');font-weight:400;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:'AmiriLocal';src:url('${BASE}/fonts/amiri-latin-700-normal.ttf') format('truetype');font-weight:700;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+2000-206F}
+`;
+
 export const metadata: Metadata = {
   title: "محرّر البحث — عدّل ملفات PDF واحفظها",
   description:
@@ -29,6 +39,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
+        <style dangerouslySetInnerHTML={{ __html: AMIRI_FACES }} />
         {children}
         <Toaster position="top-center" richColors />
       </body>

@@ -121,39 +121,7 @@
   }
 }
 
-/* ===== Amiri للنصوص العربية القابلة للتحرير ===== */
-@font-face {
-  font-family: 'AmiriLocal';
-  src: url('/fonts/amiri-arabic-400-normal.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
-@font-face {
-  font-family: 'AmiriLocal';
-  src: url('/fonts/amiri-arabic-700-normal.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
-@font-face {
-  font-family: 'AmiriLocal';
-  src: url('/fonts/amiri-latin-400-normal.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0000-00FF, U+2000-206F;
-}
-@font-face {
-  font-family: 'AmiriLocal';
-  src: url('/fonts/amiri-latin-700-normal.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0000-00FF, U+2000-206F;
-}
+/* خط أميري أُنقل إلى <style> داخل layout.tsx لدعم basePath في GitHub Pages */
 .font-amiri {
   font-family: 'AmiriLocal', 'Amiri', 'Traditional Arabic', serif;
 }

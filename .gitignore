@@ -52,3 +52,8 @@ prompt
 server.log
 # Skills directory
 /skills/
+# build/deploy & test artifacts
+/.tmp-*/
+/scripts/pdf-editor/*.png
+/scripts/pdf-editor/*.pdf
+/scripts/pdf-editor/*.json

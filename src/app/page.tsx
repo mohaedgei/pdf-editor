@@ -118,12 +118,12 @@ async function loadPdfIntoPages(
   onProgress: (s: string) => void
 ): Promise<DocData> {
   const pdfjs = await import('pdfjs-dist')
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+  pdfjs.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.mjs'
   const buf = await file.arrayBuffer()
   const doc = await pdfjs.getDocument({
     data: new Uint8Array(buf),
-    standardFontDataUrl: '/pdfjs-std/',
-    cMapUrl: '/pdfjs-cmaps/',
+    standardFontDataUrl: 'pdfjs-std/',
+    cMapUrl: 'pdfjs-cmaps/',
     cMapPacked: true,
     isEvalSupported: false,
   }).promise
@@ -498,37 +498,83 @@ export default function Home() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  /* ---- الحفظ للتصدير ---- */
-  const buildPayload = useCallback(() => {
+  /* ---- الحفظ: توليد PDF بالكامل داخل المتصفح ----
+   * كل صفحة تُرسَم على canvas كما هي بالضبط (الصورة الأصلية + البقع البيضاء + النصوص المعدلة بخط أميري)
+   * ثم تُضمّن كصفحة في PDF عبر pdf-lib — نفس محرك التشكيل اللي يعرض المحرر = WYSIWYG مضمون */
+  const savePdf = useCallback(async () => {
     const d = docRef.current
-    if (!d) return null
-    return {
-      fileName: d.fileName,
-      pages: d.pages.map((pg) => ({
-        width: pg.width,
-        height: pg.height,
-        bg: pg.bg,
-        patches: pg.blocks
-          .filter((b) => b.origin === 'pdf' && (b.dirty || b.deleted) && b.patchBox)
-          .map((b) => b.patchBox),
-        texts: pg.blocks
-          .filter((b) => !b.deleted && (b.origin === 'new' || b.dirty) && b.text.trim() !== '')
-          .map((b) => ({
-            x: b.x,
-            top: b.top,
-            w: b.w,
-            size: b.size,
-            color: b.color,
-            text: b.text,
-            rtl: b.rtl || AR_RE.test(b.text),
-          })),
-      })),
-    }
-  }, [])
+    if (!d || busy) return
+    setBusy('render')
+    try {
+      await document.fonts.ready
+      const { PDFDocument } = await import('pdf-lib')
+      const pdfDoc = await PDFDocument.create()
+      pdfDoc.setTitle(d.fileName.replace(/\.pdf$/i, ''))
+      const S2 = 2 // دقة الرسم: ضعف العرض (نفس دقة صور الصفحات)
+      for (const pg of d.pages) {
+        const c = document.createElement('canvas')
+        c.width = pg.width * S2
+        c.height = pg.height * S2
+        const ctx = c.getContext('2d')!
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, c.width, c.height)
 
-  useEffect(() => {
-    ;(window as unknown as { __getExportPayload?: unknown }).__getExportPayload = buildPayload
-  }, [buildPayload])
+        // 1) الصفحة الأصلية بصورها وشعاراتها — من غير أي تغيير
+        const img = new Image()
+        img.src = pg.bg
+        await img.decode()
+        ctx.drawImage(img, 0, 0, c.width, c.height)
+
+        // 2) بقع بيضاء فوق مواضع الكلام المعدل/المحذوف/المسحوب
+        ctx.fillStyle = '#ffffff'
+        for (const b of pg.blocks) {
+          if (b.origin === 'pdf' && (b.dirty || b.deleted) && b.patchBox) {
+            ctx.fillRect(b.patchBox.x * S2, b.patchBox.y * S2, b.patchBox.w * S2, b.patchBox.h * S2)
+          }
+        }
+
+        // 3) النصوص المعدلة والجديدة بخط أميري — نفس المحاذاة والبساط اللي في المحرر (line-height:1)
+        ctx.textBaseline = 'alphabetic'
+        for (const b of pg.blocks) {
+          if (b.deleted) continue
+          if (!(b.dirty || b.origin === 'new') || !b.text.trim()) continue
+          ctx.font = `${b.size * S2}px ${AMIRI_STACK}`
+          ctx.fillStyle = b.color
+          ctx.direction = b.rtl ? 'rtl' : 'ltr'
+          ctx.textAlign = b.rtl ? 'right' : 'left'
+          let y = b.baseline * S2
+          for (const ln of b.text.split('\n')) {
+            ctx.fillText(ln, (b.rtl ? b.x + b.w : b.x) * S2, y)
+            y += b.size * S2
+          }
+        }
+
+        const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/jpeg', 0.92))
+        c.width = 0
+        c.height = 0
+        if (!blob) throw new Error('page encode failed')
+        const emb = await pdfDoc.embedJpg(new Uint8Array(await blob.arrayBuffer()))
+        // 794px عند 96dpi = 595.5pt — نفس مقاس A4 اللي كان يطلعه السيرفر
+        const page = pdfDoc.addPage([(pg.width * 72) / 96, (pg.height * 72) / 96])
+        page.drawImage(emb, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() })
+      }
+      const out = await pdfDoc.save()
+      const url = URL.createObjectURL(new Blob([out as BlobPart], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${d.fileName.replace(/\.pdf$/i, '') || 'document'}-معدل.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      toast.success('تم حفظ الـ PDF بنفس شكل الأصل ومعاه تعديلاتك')
+    } catch (err) {
+      console.error(err)
+      toast.error('حدث خطأ أثناء الحفظ — حاول مرة أخرى')
+    } finally {
+      setBusy(null)
+    }
+  }, [busy])
 
   const pushUndo = useCallback(() => {
     const d = docRef.current
@@ -586,7 +632,7 @@ export default function Home() {
     setBusy('prep')
     setPrepMsg('جاري تحميل الملف النموذجي…')
     try {
-      const res = await fetch('/sample.pdf')
+      const res = await fetch('sample.pdf')
       const blob = await res.blob()
       await handleFile(new File([blob], 'بحث خصائص لغة الإعلام.pdf', { type: 'application/pdf' }))
     } catch {
@@ -714,37 +760,6 @@ export default function Home() {
 
   /* ---- اختصارات ---- */
   const saveRef = useRef<() => void>(() => {})
-  const savePdf = useCallback(async () => {
-    const payload = buildPayload()
-    if (!payload || busy) return
-    setBusy('render')
-    try {
-      const res = await fetch('/api/render', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => null)
-        toast.error(data?.error || 'تعذّر توليد ملف PDF')
-        return
-      }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${docRef.current?.fileName.replace(/\.pdf$/i, '') || 'document'}-معدل.pdf`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 10_000)
-      toast.success('تم حفظ الـ PDF بنفس شكل الأصل ومعاه تعديلاتك')
-    } catch {
-      toast.error('حدث خطأ أثناء الحفظ — حاول مرة أخرى')
-    } finally {
-      setBusy(null)
-    }
-  }, [buildPayload, busy])
   saveRef.current = () => {
     void savePdf()
   }
