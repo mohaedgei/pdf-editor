@@ -126,13 +126,24 @@ export async function POST(req: NextRequest) {
 
     await fs.writeFile(htmlPath, buildHtml(outName, body.pages), "utf-8");
 
-    const renderer = path.join(process.cwd(), "skills", "pdf", "scripts", "html2pdf-next.js");
+    // المسار والوسائط تُبنى وقت التشغيل عمدًا — push يمنع تتبع Turbopack الساكن أثناء البناء
+    const segs = ["skills", "pdf", "scripts", "html2pdf-next.js"].filter(Boolean);
+    const renderer = path.join(process.cwd(), segs.join(path.sep));
     await fs.access(renderer);
+
+    const argv: string[] = [];
+    argv.push(renderer);
+    argv.push(htmlPath);
+    argv.push("--nopaged");
+    argv.push("--output");
+    argv.push(pdfPath);
+    argv.push("--title");
+    argv.push(outName);
 
     await new Promise<void>((resolve, reject) => {
       execFile(
         "node",
-        [renderer, htmlPath, "--nopaged", "--output", pdfPath, "--title", outName],
+        argv,
         { timeout: 150_000, maxBuffer: 20 * 1024 * 1024, cwd: process.cwd() },
         (err, _stdout, stderr) => {
           if (err) reject(new Error(`renderer: ${err.message} ${stderr?.slice(-800) || ""}`));

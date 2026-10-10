@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>فاحص الذكاء الاصطناعي للنصوص العربية</title>
+<meta name="description" content="ارفع أي PDF أو الصق أي نص واعرف نسبته من الذكاء الاصطناعي — كل التحليل يحدث داخل متصفحك بدون أي API خارجي" />
+<meta name="robots" content="index, follow" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>" />
+<style>
+  :root {
+    --bg: #fafafa; --card: #ffffff; --line: #e4e4e7;
+    --ink: #18181b; --mut: #71717a; --faint: #a1a1aa;
+    --acc: #059669; --acc-d: #047857; --acc-bg: #ecfdf5; --acc-line: #a7f3d0;
+    --rose: #e11d48; --rose-bg: #fff1f2; --rose-line: #fecdd3; --rose-ink: #9f1239;
+    --amber: #d97706; --amber-bg: #fffbeb; --amber-line: #fde68a; --amber-ink: #92400e;
+    --teal: #0d9488; --teal-bg: #f0fdfa; --teal-line: #99f6e4; --teal-ink: #115e59;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", "Noto Naskh Arabic", Arial, sans-serif;
+    background: var(--bg); color: var(--ink); min-height: 100vh;
+    display: flex; flex-direction: column; line-height: 1.7;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,255,255,.9); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .hwrap {
+    max-width: 900px; margin: 0 auto; padding: 10px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .logo {
+    width: 38px; height: 38px; border-radius: 12px; background: var(--acc);
+    color: #fff; display: flex; align-items: center; justify-content: center; font-size: 19px;
+  }
+  .brand b { font-size: 15px; display: block; line-height: 1.3; }
+  .brand small { color: var(--mut); font-size: 12px; font-weight: 400; display: block; }
+  .back {
+    display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+    border: 1px solid var(--line); background: #fff; color: #52525b;
+    padding: 7px 13px; border-radius: 10px; font-size: 13.5px; font-weight: 700;
+    transition: all .2s;
+  }
+  .back:hover { border-color: var(--acc); color: var(--acc-d); }
+  main { flex: 1; max-width: 900px; width: 100%; margin: 0 auto; padding: 28px 16px 40px; }
+  footer { border-top: 1px solid var(--line); background: #fff; text-align: center; padding: 14px 16px; font-size: 12px; color: var(--faint); }
+  footer a { color: var(--acc-d); text-decoration: none; font-weight: 700; }
+
+  .hero { text-align: center; margin-bottom: 26px; }
+  .hero h1 { font-size: 27px; font-weight: 800; line-height: 1.45; margin-bottom: 8px; }
+  .hero p { color: #52525b; max-width: 640px; margin: 0 auto; font-size: 15px; }
+  .badge {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    max-width: 580px; margin: 16px auto 0;
+    background: var(--acc-bg); border: 1px solid var(--acc-line); color: #065f46;
+    padding: 9px 16px; border-radius: 14px; font-size: 13.5px; font-weight: 700;
+  }
+  .tabs {
+    display: flex; justify-content: center; gap: 4px;
+    background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04); max-width: 320px; margin: 0 auto 18px;
+  }
+  .tabs button {
+    flex: 1; border: 0; background: transparent; cursor: pointer;
+    padding: 9px 14px; border-radius: 10px; font-family: inherit; font-size: 13.5px; font-weight: 700; color: #52525b;
+    transition: all .15s;
+  }
+  .tabs button.on { background: var(--acc); color: #fff; }
+  .drop {
+    background: #fff; border: 2px dashed #d4d4d8; border-radius: 18px;
+    padding: 54px 20px; text-align: center; cursor: pointer; transition: all .2s;
+  }
+  .drop:hover, .drop.over { border-color: var(--acc); background: var(--acc-bg); }
+  .drop .ic { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 16px; background: var(--acc-bg); color: var(--acc); display: flex; align-items: center; justify-content: center; font-size: 26px; }
+  .drop .t1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .drop .t2 { color: var(--mut); font-size: 13.5px; margin-bottom: 18px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; font-family: inherit; cursor: pointer;
+    border: 1px solid #d4d4d8; background: #fff; color: #3f3f46;
+    padding: 9px 17px; border-radius: 11px; font-size: 13.5px; font-weight: 700; transition: all .2s;
+  }
+  .btn:hover { border-color: var(--acc); color: var(--acc-d); }
+  .btn.pri { background: var(--acc); border-color: var(--acc); color: #fff; }
+  .btn.pri:hover { background: var(--acc-d); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  textarea {
+    width: 100%; min-height: 210px; resize: vertical;
+    font-family: inherit; font-size: 15px; line-height: 1.8; color: #27272a;
+    background: #fafafa; border: 1px solid #d4d4d8; border-radius: 14px; padding: 15px; outline: none;
+    transition: all .2s;
+  }
+  textarea:focus { border-color: var(--acc); background: #fff; }
+  .err {
+    max-width: 580px; margin: 16px auto 0; text-align: center;
+    background: var(--rose-bg); border: 1px solid var(--rose-line); color: #be123c;
+    padding: 11px 16px; border-radius: 14px; font-size: 13.5px; font-weight: 700;
+  }
+  .spin { width: 38px; height: 38px; margin: 0 auto 12px; border: 4px solid var(--acc-line); border-top-color: var(--acc); border-radius: 50%; animation: sp 0.8s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+
+  /* ---------- النتيجة ---------- */
+  .res { display: none; }
+  .res.show { display: block; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,.04); margin-bottom: 18px; }
+  .card h2 { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+  .card .sub { color: var(--faint); font-size: 12px; margin-bottom: 16px; }
+  .verdict {
+    display: inline-block; padding: 6px 17px; border-radius: 99px;
+    font-size: 14px; font-weight: 800; margin-top: 14px;
+  }
+  .v-good { background: var(--acc-bg); color: var(--acc-d); border: 1px solid var(--acc-line); }
+  .v-ok { background: var(--teal-bg); color: var(--teal-ink); border: 1px solid var(--teal-line); }
+  .v-warn { background: var(--amber-bg); color: var(--amber-ink); border: 1px solid var(--amber-line); }
+  .v-bad { background: var(--rose-bg); color: var(--rose-ink); border: 1px solid var(--rose-line); }
+  .meta { color: var(--mut); font-size: 12.5px; margin-top: 12px; }
+  .gauge { position: relative; width: 200px; height: 200px; margin: 14px auto; }
+  .gauge svg { transform: rotate(-90deg); }
+  .gauge .num { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .gauge .num b { font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .gauge .num span { font-size: 12px; font-weight: 700; color: var(--mut); }
+  .bars .row { margin-bottom: 14px; }
+  .bars .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+  .bars .lbl { font-size: 14px; font-weight: 700; }
+  .bars .chip { font-size: 11px; font-weight: 700; background: #f4f4f5; color: #71717a; border-radius: 7px; padding: 1px 7px; margin-inline-start: 6px; white-space: nowrap; }
+  .bars .val { font-size: 12px; font-weight: 800; color: var(--mut); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .track { height: 9px; background: #f4f4f5; border-radius: 99px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 99px; transition: width .8s ease; }
+  .f-g { background: var(--acc); } .f-a { background: var(--amber); } .f-r { background: var(--rose); }
+  .bars .desc { font-size: 11.5px; color: var(--faint); margin-top: 3px; }
+  .pagerow { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .pagerow .pl { width: 52px; font-size: 12.5px; font-weight: 700; color: var(--mut); flex-shrink: 0; }
+  .pagerow .track { flex: 1; height: 10px; }
+  .pagerow .pv { width: 46px; text-align: left; font-size: 12.5px; font-weight: 800; font-variant-numeric: tabular-nums; color: #3f3f46; flex-shrink: 0; }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag { border-radius: 10px; padding: 5px 11px; font-size: 13px; font-weight: 700; background: #fff; }
+  .tag-r { border: 1px solid var(--rose-line); color: var(--rose-ink); }
+  .tag-r small { color: #fb7185; }
+  .tag-g { border: 1px solid var(--acc-line); color: var(--acc-d); }
+  .tag-g small { color: #34d399; }
+  .note { background: #f4f4f5; border: 1px solid var(--line); text-align: center; }
+  .note p { max-width: 660px; margin: 0 auto; font-size: 13px; color: #52525b; }
+  .fname { color: var(--mut); font-size: 13.5px; font-weight: 700; margin-bottom: 2px; }
+  @media (max-width: 560px) {
+    .hero h1 { font-size: 21px; }
+    .card { padding: 18px; }
+    .gauge { width: 168px; height: 168px; }
+    .gauge svg { width: 168px; height: 168px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hwrap">
+    <div class="brand">
+      <div class="logo">✨</div>
+      <div>
+        <b>فاحص الذكاء الاصطناعي</b>
+        <small>للنصوص العربية — يعمل داخل متصفحك</small>
+      </div>
+    </div>
+    <a class="back" href="https://mohaedgei.github.io/pdf-editor/">محرر البحث ←</a>
+  </div>
+</header>
+
+<main>
+  <!-- ============ الإدخال ============ -->
+  <div id="inputView">
+    <div class="hero">
+      <h1>ارفع أي PDF أو الصق أي نص…<br />واعرف نسبته من الذكاء الاصطناعي</h1>
+      <p>الفاحص يقرأ أسلوب الكلام نفسه: العبارات الجاهزة، انتظام أطوال الجمل، تكرار البادئات، وصيغ الكتابة المكتبية — ويعطيك نسبة مئوية تقديرية.</p>
+      <div class="badge">🛡️ التحليل كله بيحصل جوه متصفحك — ملفك مش بيترفع على أي سيرفر، ومفيش أي API خارجي</div>
+    </div>
+
+    <div class="tabs">
+      <button id="tabPdf" class="on" type="button">📄 ملف PDF</button>
+      <button id="tabText" type="button">📋 لصق نص</button>
+    </div>
+
+    <div id="pdfBox" class="drop" role="button" tabindex="0" aria-label="رفع ملف PDF للفحص">
+      <input id="fileInput" type="file" accept=".pdf,application/pdf" hidden />
+      <div id="pdfIdle">
+        <div class="ic">⬆️</div>
+        <div class="t1">اسحب ملف PDF هنا أو اضغط للاختيار</div>
+        <div class="t2">لازم يكون نص حقيقي (مش صور ممسوحة ضوئيًا)</div>
+        <button id="sampleBtn" class="btn" type="button">🔎 جرّب ببحث نموذجي</button>
+      </div>
+      <div id="pdfBusy" style="display:none">
+        <div class="spin"></div>
+        <div class="t2" id="progressMsg">جاري التجهيز…</div>
+      </div>
+    </div>
+
+    <div id="textBox" style="display:none">
+      <div class="card" style="margin-bottom:0">
+        <textarea id="textInput" placeholder="الصق النص العربي هنا…
+
+نصيحة: كل ما النص يكون أطول، الفحص يبقى أدق — الأفضل من ١٥٠ كلمة."></textarea>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px">
+          <span id="wordCount" style="font-size:12px;color:var(--faint)">—</span>
+          <button id="analyzeTextBtn" class="btn pri" type="button">✨ افحص النص</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="errBox" class="err" style="display:none"></div>
+  </div>
+
+  <!-- ============ النتيجة ============ -->
+  <div id="resultView" class="res">
+    <div class="card" style="text-align:center">
+      <div class="fname" id="resName"></div>
+      <div class="gauge">
+        <svg width="200" height="200" viewBox="0 0 200 200">
+          <circle cx="100" cy="100" r="64" fill="none" stroke="#f4f4f5" stroke-width="18"></circle>
+          <circle id="gaugeArc" cx="100" cy="100" r="64" fill="none" stroke="#e11d48" stroke-width="18"
+                  stroke-linecap="round" stroke-dasharray="402.12" stroke-dashoffset="402.12"
+                  style="transition: stroke-dashoffset 1s ease, stroke .6s ease"></circle>
+        </svg>
+        <div class="num">
+          <b id="resPct">0%</b>
+          <span>نسبة الذكاء الاصطناعي</span>
+        </div>
+      </div>
+      <div id="resVerdict" class="verdict v-bad"></div>
+      <div class="meta" id="resMeta"></div>
+      <button id="againBtn" class="btn" type="button" style="margin-top:18px">↺ فحص ملف أو نص تاني</button>
+    </div>
+
+    <div class="card" id="pagesCard" style="display:none">
+      <h2>تفصيل الصفحات</h2>
+      <div class="sub">كل صفحة بتتحلل لوحدها — الصفحات القصيرة دقتها أقل</div>
+      <div id="pagesList"></div>
+    </div>
+
+    <div class="card">
+      <h2>المؤشرات اللي اتلقطت</h2>
+      <div class="sub">كل مؤشر بيتحسب من أسلوب النص نفسه — النسب تشير لقوة اللمحة مش لحكم نهائي</div>
+      <div class="bars" id="signalsList"></div>
+    </div>
+
+    <div class="card" id="phrasesCard" style="display:none;background:rgba(255,241,242,.6);border-color:var(--rose-line)">
+      <h2 style="color:var(--rose-ink)">عبارات مصنّفة «آلية» اتلقطت في النص</h2>
+      <div class="sub" style="color:#fb7185">دي عبارات بتتكرر جدًا في النصوص المولّدة آليًا وقليلة في كتابة البشر</div>
+      <div class="tags" id="phrasesList"></div>
+    </div>
+
+    <div class="card" id="humanCard" style="display:none;background:rgba(236,253,245,.6);border-color:var(--acc-line)">
+      <h2 style="color:#065f46">علامات كتابة بشرية اتلقطت</h2>
+      <div class="sub" style="color:#34d399">العامية والضمير المتكلم والتعجب — كلها تقلل احتمال الآلي</div>
+      <div class="tags" id="humanList"></div>
+    </div>
+
+    <div class="card note">
+      <p><b>مهم:</b> النسبة دي <b>تقديرية</b> ومبنية على بصمة أسلوبية إحصائية، مش دليل قاطع —
+      ولا أداة في العالم بتقدر تجزم ١٠٠٪. النصوص الأكاديمية الرسمية بتميل طبعًا لأسلوب منسق،
+      والنص القصير (أقل من ١٥٠ كلمة) دقته أقل. استخدم النتيجة كمؤشر مساعد بس.</p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  فاحص الذكاء الاصطناعي · <a href="https://mohaedgei.github.io/pdf-editor/">موقع محرر البحث</a> · كل الحسابات محلية داخل المتصفح
+</footer>
+
+<!-- حماية من الدوس المبكر قبل تحميل محرك الفحص: نعرض حالة تحميل بدل ما الدوس يضيع -->
+<script>
+  window.__aiReady = false;
+  document.addEventListener('click', function (e) {
+    if (window.__aiReady) return;
+    var t = e.target.closest && e.target.closest('#sampleBtn, #analyzeTextBtn, #tabPdf, #tabText, #pdfBox');
+    if (t) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      document.getElementById('pdfIdle').style.display = 'none';
+      document.getElementById('pdfBusy').style.display = '';
+      document.getElementById('progressMsg').textContent = 'جاري تحميل محرك الفحص…';
+    }
+  }, true);
+</script>
+<script type="module">
+import { analyzeAiText } from './engine.js';
+import * as pdfjsLib from './pdf.min.mjs';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
+
+/* ================= استخراج النص من PDF =================
+   نفس قواعد المحرر: تجميع أسطر بـ Y + وصل تنازلي X (يمين ← يسار) */
+
+const DIR_MARKS = /[\u0000\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+const MARKS_RE = /^[\u064B-\u065F\u0670\u0640]+$/u;
+const LETTER_RE = /[\p{L}\u0640]/u;
+
+function median(nums) {
+  if (!nums.length) return 0;
+  const s = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+function attachMarks(words, marks) {
+  for (const m of marks) {
+    const c = m.x + m.w / 2;
+    let inside = null;
+    for (const w of words) {
+      if (LETTER_RE.test(w.str) && c > w.x + 0.01 && c < w.x + w.w - 0.01) { inside = w; break; }
+    }
+    if (inside) { inside.str += m.str; continue; }
+    const rightOfMark = words.filter((w) => LETTER_RE.test(w.str) && w.x + w.w > c + 0.01);
+    if (rightOfMark.length) { rightOfMark.sort((a, b) => a.x - b.x); rightOfMark[0].str += m.str; continue; }
+    const letterWords = words.filter((w) => LETTER_RE.test(w.str));
+    const pool = letterWords.length ? letterWords : words;
+    let best = null, bestD = Infinity;
+    for (const w of pool) {
+      const d = Math.min(Math.abs(c - w.x), Math.abs(c - (w.x + w.w)));
+      if (d < bestD) { bestD = d; best = w; }
+    }
+    if (best) best.str += m.str;
+  }
+}
+
+function buildLineBlocks(items) {
+  const groups = [];
+  for (const it of items) {
+    if (!it.str || !it.str.trim()) continue;
+    let g = null;
+    for (const G of groups) { if (Math.abs(G[0].y - it.y) <= 4) { g = G; break; } }
+    if (g) g.push(it); else groups.push([it]);
+  }
+  const lines = [];
+  for (const g of groups) {
+    const words = [], marks = [];
+    for (const it of g) {
+      const s = it.str.replace(DIR_MARKS, '').replace(/[ \t\u00a0]+/g, '');
+      if (!s) continue;
+      if (MARKS_RE.test(s)) marks.push({ ...it, str: s });
+      else words.push({ ...it, str: s });
+    }
+    if (!words.length) continue;
+    attachMarks(words, marks);
+    words.sort((a, b) => b.x - a.x);
+    let text = '', prevLeft = null;
+    for (const w of words) {
+      if (prevLeft !== null && prevLeft - (w.x + w.w) > 2.4) text += ' ';
+      text += w.str;
+      prevLeft = w.x;
+    }
+    text = text.replace(/\s+/g, ' ').trim();
+    if (text) lines.push({ baseline: median(words.map((w) => w.y)), text });
+  }
+  lines.sort((a, b) => a.baseline - b.baseline);
+  return lines.map((l) => l.text);
+}
+
+async function extractPdfPages(data, onProgress) {
+  const doc = await pdfjsLib.getDocument({
+    data,
+    standardFontDataUrl: './pdfjs-std/',
+    cMapUrl: './pdfjs-cmaps/',
+    cMapPacked: true,
+    isEvalSupported: false,
+  }).promise;
+  const texts = [];
+  for (let pn = 1; pn <= doc.numPages; pn++) {
+    onProgress(`جاري قراءة الصفحة ${pn} من ${doc.numPages}…`);
+    const page = await doc.getPage(pn);
+    const p1 = page.getViewport({ scale: 1 });
+    const S = 794 / p1.width;
+    const vp = page.getViewport({ scale: S });
+    const tc = await page.getTextContent();
+    const items = [];
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const tx = pdfjsLib.Util.transform(vp.transform, it.transform);
+      const fh = Math.hypot(tx[2], tx[3]);
+      if (fh < 3) continue;
+      items.push({ x: tx[4], y: tx[5], w: (it.width || 0) * S, h: fh, str: it.str });
+    }
+    const lines = buildLineBlocks(items);
+    texts.push(lines.join('\n'));
+  }
+  return texts;
+}
+
+/* ================= عناصر الواجهة ================= */
+
+const $ = (id) => document.getElementById(id);
+const tabPdf = $('tabPdf'), tabText = $('tabText');
+const pdfBox = $('pdfBox'), textBox = $('textBox');
+const fileInput = $('fileInput');
+const pdfIdle = $('pdfIdle'), pdfBusy = $('pdfBusy');
+const progressMsg = $('progressMsg');
+const errBox = $('errBox');
+const textInput = $('textInput'), wordCount = $('wordCount');
+const inputView = $('inputView'), resultView = $('resultView');
+const C = 2 * Math.PI * 64;
+const TONE = {
+  good: ['#059669', 'v-good'], ok: ['#0d9488', 'v-ok'],
+  warn: ['#d97706', 'v-warn'], bad: ['#e11d48', 'v-bad'],
+};
+const barCls = (s) => (s < 30 ? 'f-g' : s < 60 ? 'f-a' : 'f-r');
+
+let mode = 'pdf';
+let busy = false;
+
+function showError(msg) { errBox.textContent = msg; errBox.style.display = 'block'; }
+function clearError() { errBox.style.display = 'none'; }
+
+function setMode(m) {
+  mode = m;
+  tabPdf.classList.toggle('on', m === 'pdf');
+  tabText.classList.toggle('on', m === 'text');
+  pdfBox.style.display = m === 'pdf' ? '' : 'none';
+  textBox.style.display = m === 'text' ? '' : 'none';
+  clearError();
+}
+
+tabPdf.addEventListener('click', () => setMode('pdf'));
+tabText.addEventListener('click', () => setMode('text'));
+
+textInput.addEventListener('input', () => {
+  const t = textInput.value.trim();
+  wordCount.textContent = t ? `${t.split(/\s+/).length} كلمة` : '—';
+});
+
+pdfBox.addEventListener('click', (e) => {
+  if (!busy && e.target.id !== 'sampleBtn') fileInput.click();
+});
+pdfBox.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!busy) fileInput.click(); }
+});
+pdfBox.addEventListener('dragover', (e) => { e.preventDefault(); pdfBox.classList.add('over'); });
+pdfBox.addEventListener('dragleave', () => pdfBox.classList.remove('over'));
+pdfBox.addEventListener('drop', (e) => {
+  e.preventDefault(); pdfBox.classList.remove('over');
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f && !busy) handleFile(f);
+});
+fileInput.addEventListener('change', () => {
+  const f = fileInput.files && fileInput.files[0];
+  if (f) handleFile(f);
+});
+
+function setBusy(on, msg) {
+  busy = on;
+  pdfIdle.style.display = on ? 'none' : '';
+  pdfBusy.style.display = on ? '' : 'none';
+  if (msg) progressMsg.textContent = msg;
+}
+
+async function handleFile(f) {
+  clearError();
+  setBusy(true, 'جاري التجهيز…');
+  try {
+    const buf = await f.arrayBuffer();
+    const pages = await extractPdfPages(new Uint8Array(buf), (s) => { progressMsg.textContent = s; });
+    const joined = pages.join('\n');
+    setBusy(false);
+    runReport(joined, pages, f.name);
+  } catch (err) {
+    console.error(err);
+    setBusy(false);
+    showError('مش قادر أقرأ الملف ده — تأكد إنه PDF سليم وغير محمي بكلمة سر.');
+  }
+}
+
+$('sampleBtn').addEventListener('click', async (e) => {
+  e.stopPropagation();
+  clearError();
+  setBusy(true, 'جاري تحميل الملف النموذجي…');
+  try {
+    const res = await fetch('./sample.pdf');
+    const buf = await res.arrayBuffer();
+    const pages = await extractPdfPages(new Uint8Array(buf), (s) => { progressMsg.textContent = s; });
+    setBusy(false);
+    runReport(pages.join('\n'), pages, 'بحث نموذجي.pdf');
+  } catch (err) {
+    console.error(err);
+    setBusy(false);
+    showError('مش قادر أحمّل النموذج — جرب ملف عندك.');
+  }
+});
+
+$('analyzeTextBtn').addEventListener('click', () => {
+  clearError();
+  const t = textInput.value.trim();
+  if (t.split(/\s+/).length < 15) {
+    showError('اكتب نص أطول شوية (١٥ كلمة على الأقل) عشان الفحص يبقى ليه معنى.');
+    return;
+  }
+  runReport(t, null, 'نص ملصوق');
+});
+
+$('againBtn').addEventListener('click', () => {
+  resultView.classList.remove('show');
+  inputView.style.display = '';
+  clearError();
+  fileInput.value = '';
+  window.scrollTo({ top: 0 });
+});
+
+/* ================= عرض التقرير ================= */
+
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function runReport(text, pages, name) {
+  const r = analyzeAiText(text, pages ? { pageTexts: pages } : {});
+  if (!r.ok) {
+    if (r.reason === 'not-arabic') showError('الفاحص ده مضبوط للنص العربي — الملف ده مفيهوش نص عربي كافي.');
+    else showError('مفيش نص كفاية للفحص — الملف ده غالبًا صورة ممسوحة ضوئيًا مش نص.');
+    return;
+  }
+
+  window.__dbgPages = pages;
+  $('resName').textContent = name;
+  const [color, vcls] = TONE[r.tone] || TONE.bad;
+  $('resPct').textContent = `${r.percent}%`;
+  $('resPct').style.color = '';
+  const arc = $('gaugeArc');
+  arc.style.stroke = color;
+  requestAnimationFrame(() => {
+    arc.style.strokeDashoffset = String(C * (1 - r.percent / 100));
+  });
+  const vd = $('resVerdict');
+  vd.textContent = r.verdict;
+  vd.className = `verdict ${vcls}`;
+  $('resMeta').innerHTML =
+    `ثقة الفحص: <b style="color:#3f3f46">${r.confidence}</b> · ${r.stats.words} كلمة · ${r.stats.sentences} جملة` +
+    (r.stats.avgSentence ? ` · متوسط الجملة ${r.stats.avgSentence} كلمة` : '');
+
+  /* الصفحات */
+  const pagesCard = $('pagesCard'), pagesList = $('pagesList');
+  if (r.pages && r.pages.length > 1) {
+    pagesCard.style.display = '';
+    pagesList.innerHTML = r.pages.map((p) =>
+      `<div class="pagerow"><span class="pl">صفحة ${p.page}</span>` +
+      `<div class="track">${p.percent != null ? `<div class="fill ${barCls(p.percent)}" style="width:0%" data-w="${p.percent}"></div>` : ''}</div>` +
+      `<span class="pv">${p.percent == null ? '—' : p.percent + '%'}</span></div>`
+    ).join('');
+  } else pagesCard.style.display = 'none';
+
+  /* المؤشرات */
+  $('signalsList').innerHTML = [...r.signals]
+    .sort((a, b) => b.score - a.score)
+    .map((s) => {
+      const extra = s.hits ? `<span class="chip">${s.hits} إصابة</span>`
+        : s.count ? `<span class="chip">${s.count}</span>` : '';
+      return `<div class="row"><div class="top"><span class="lbl">${esc(s.label)}${extra}</span><span class="val">${s.score}%</span></div>` +
+        `<div class="track"><div class="fill ${barCls(s.score)}" style="width:0%" data-w="${s.score}"></div></div>` +
+        `<div class="desc">${esc(s.desc)}</div></div>`;
+    }).join('');
+
+  /* العبارات */
+  const phrasesCard = $('phrasesCard'), phrasesList = $('phrasesList');
+  if (r.phrases.length) {
+    phrasesCard.style.display = '';
+    phrasesList.innerHTML = r.phrases.map((p) =>
+      `<span class="tag tag-r">${esc(p.phrase)}${p.count > 1 ? `<small> ×${p.count}</small>` : ''}</span>`
+    ).join('');
+  } else phrasesCard.style.display = 'none';
+
+  /* العلامات البشرية */
+  const humanCard = $('humanCard'), humanList = $('humanList');
+  if (r.humanMarks.length) {
+    humanCard.style.display = '';
+    humanList.innerHTML = r.humanMarks.map((p) =>
+      `<span class="tag tag-g">${esc(p.phrase)}${p.count > 1 ? `<small> ×${p.count}</small>` : ''}</span>`
+    ).join('');
+  } else humanCard.style.display = 'none';
+
+  inputView.style.display = 'none';
+  resultView.classList.add('show');
+  window.scrollTo({ top: 0 });
+
+  requestAnimationFrame(() => {
+    document.querySelectorAll('#resultView .fill[data-w]').forEach((el) => {
+      el.style.width = el.dataset.w + '%';
+    });
+  });
+}
+
+/* المحرك جاهز — إعادة حالة الواجهة الطبيعية */
+window.__aiReady = true;
+document.getElementById('pdfIdle').style.display = '';
+document.getElementById('pdfBusy').style.display = 'none';
+</script>
+</body>
+</html>

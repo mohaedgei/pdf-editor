@@ -16,6 +16,7 @@ import {
   RotateCcw,
   ZoomIn,
   Hand,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { buildLineBlocks, BASELINE_K, type GeoItem } from '@/lib/pdf-layout'
@@ -895,6 +896,15 @@ export default function Home() {
               الموقع يعرض كل صفحة بصورها وشعاراتها وكل تفاصيلها، ودوس على أي كلمة تعدّلها،
               واسحب أي مربع كلام وحرّكه في أي مكان، ولما تحفظ كل حاجة تفضل في مكانها.
             </p>
+            <div className="mt-5 flex justify-center">
+              <a
+                href="ai-detector/"
+                className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition-colors hover:border-emerald-400 hover:text-emerald-700"
+              >
+                <Sparkles className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                فاحص الذكاء الاصطناعي — اكتشف نسبة AI في أي بحث
+              </a>
+            </div>
           </div>
 
           <div
